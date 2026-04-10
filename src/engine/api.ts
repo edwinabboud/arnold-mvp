@@ -1,0 +1,422 @@
+// =============================================================================
+// ARNOLD — Claude API Integration
+// 4 specialized agents + orchestration router + quick response bypass.
+// Claude Sonnet for all agents in MVP. Opus only if quality insufficient.
+//
+// Agent prompts live in src/engine/prompts/ — one file per agent.
+// This file handles: config, quick response bypass, API calls, orchestration.
+// =============================================================================
+
+import {
+  CoachingContext,
+  CoachingDecision,
+  GoalPriority,
+  Mesocycle,
+  PainReport,
+  PlanPhase,
+  PlannedExercise,
+  PlannedSession,
+  SessionLog,
+  UserProgression,
+} from "../types";
+import { ChatMessage } from "../types/logging";
+import { getExerciseKnowledge } from "../data/exerciseKnowledge";
+
+// ── Agent Prompts (imported from dedicated files) ────────────────────────────
+import { CONVERSATION_AGENT_PROMPT } from "./prompts/conversationAgent";
+import { PLAN_GENERATOR_PROMPT } from "./prompts/planGeneratorAgent";
+import { SESSION_ADAPTER_PROMPT } from "./prompts/sessionAdapterAgent";
+import { PROGRESS_ANALYST_PROMPT } from "./prompts/progressAnalystAgent";
+
+// ── Silent Adaptation (deterministic, no AI) ─────────────────────────────────
+import {
+  processSessionForAdaptation,
+  SilentAdaptationResult,
+} from "./silentAdaptation";
+
+// ── Config ───────────────────────────────────────────────────────────────────
+
+const API_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-3-haiku-20240307";
+const MAX_TOKENS = 500;
+
+interface APIConfig {
+  apiKey: string;
+  model?: string;
+  maxTokens?: number;
+}
+
+let config: APIConfig = { apiKey: "", model: MODEL, maxTokens: MAX_TOKENS };
+
+export function configureAPI(apiConfig: APIConfig): void {
+  config = { ...config, ...apiConfig };
+}
+
+// ── Quick Response Bypass ────────────────────────────────────────────────────
+// Common actions skip the LLM entirely. ~80% of interactions hit this path.
+// Keeps API costs at ~$0.02–$0.05 per training session.
+
+export function tryQuickResponse(
+  action: string,
+  context: {
+    exerciseName?: string;
+    setsRemaining?: number;
+    exercisesRemaining?: number;
+    restSeconds?: number;
+    setNumber?: number;
+    totalSets?: number;
+  }
+): ChatMessage | null {
+  const now = new Date().toISOString();
+  const id = `msg_${Date.now()}`;
+
+  switch (action) {
+    case "set_done":
+      if (context.setsRemaining && context.setsRemaining > 0) {
+        return {
+          id, role: "arnold", timestamp: now, source: "quick",
+          text: `Done. ${context.restSeconds || 90}s rest. ${context.setsRemaining} sets left.`,
+        };
+      }
+      return {
+        id, role: "arnold", timestamp: now, source: "quick",
+        text: "Last set done. Moving on.",
+      };
+
+    case "how_many_left":
+      return {
+        id, role: "arnold", timestamp: now, source: "quick",
+        text: `${context.setsRemaining || 0} sets left on ${context.exerciseName}. ${context.exercisesRemaining || 0} exercises after this.`,
+      };
+
+    case "rest_started":
+      return {
+        id, role: "arnold", timestamp: now, source: "quick",
+        text: `Rest. ${context.restSeconds}s. Set ${(context.setNumber || 0) + 1} of ${context.totalSets} next.`,
+      };
+
+    case "session_end":
+      return {
+        id, role: "arnold", timestamp: now, source: "quick",
+        text: "Session done. Good work.",
+        options: [
+          { id: "fb_great", label: "Great", action: "followup", value: "great" },
+          { id: "fb_good", label: "Good", action: "followup", value: "good" },
+          { id: "fb_tough", label: "Tough", action: "followup", value: "tough" },
+          { id: "fb_bad", label: "Bad", action: "followup", value: "bad" },
+          { id: "fb_explain", label: "Let me explain", action: "followup", value: "explain" },
+        ],
+      };
+
+    default:
+      return null;
+  }
+}
+
+// ── Agent Prompt Map ─────────────────────────────────────────────────────────
+// Each agent's full prompt lives in its own file under src/engine/prompts/.
+// This map just wires them to the agent names used by the orchestration router.
+
+const AGENT_PROMPTS = {
+  conversation: CONVERSATION_AGENT_PROMPT,
+  sessionAdapter: SESSION_ADAPTER_PROMPT,
+  progressAnalyst: PROGRESS_ANALYST_PROMPT,
+  planGenerator: PLAN_GENERATOR_PROMPT,
+};
+
+// ── API Call ──────────────────────────────────────────────────────────────────
+
+async function callAgent(
+  agent: keyof typeof AGENT_PROMPTS,
+  userMessage: string,
+  context?: string
+): Promise<string> {
+  const systemPrompt = AGENT_PROMPTS[agent];
+
+  const messages = [
+    ...(context ? [{ role: "user" as const, content: `Context:\n${context}` }, { role: "assistant" as const, content: "Understood. I have the context." }] : []),
+    { role: "user" as const, content: userMessage },
+  ];
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: config.model || MODEL,
+        max_tokens: config.maxTokens || MAX_TOKENS,
+        system: systemPrompt,
+        messages,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.content
+      ?.map((block: { type: string; text?: string }) =>
+        block.type === "text" ? block.text : ""
+      )
+      .filter(Boolean)
+      .join("\n");
+
+    return text || "";
+  } catch (error) {
+    console.error(`[Arnold] ${agent} agent error:`, error);
+    return JSON.stringify({
+      message: "Let me think about that. Try again in a sec.",
+      tone: "neutral",
+    });
+  }
+}
+
+// ── Orchestration Router ─────────────────────────────────────────────────────
+// Decides which agent to call based on what the user did.
+
+export type UserAction =
+  | { type: "chat_message"; text: string }
+  | { type: "pain_report"; bodyArea: string; severity: number }
+  | { type: "feedback"; feeling: string; exerciseId?: string }
+  | { type: "plan_change_response"; accepted: boolean }
+  | { type: "exercise_question"; exerciseId: string }
+  | { type: "general_question"; text: string };
+
+export async function routeInteraction(
+  action: UserAction,
+  coachingContext: CoachingContext,
+  rulesDecision?: CoachingDecision
+): Promise<ChatMessage> {
+  const now = new Date().toISOString();
+  const contextStr = JSON.stringify({
+    phase: coachingContext.currentPhase,
+    goals: coachingContext.userGoals,
+    todaySession: coachingContext.todaysSession?.label,
+    recentSessions: coachingContext.recentSessions.length,
+    streakDays: coachingContext.streaks.currentDaily,
+    rulesDecision,
+  });
+
+  switch (action.type) {
+    case "exercise_question": {
+      // Enrich with exercise knowledge base
+      const kb = getExerciseKnowledge(action.exerciseId);
+      const kbStr = kb
+        ? `\nExercise knowledge:\nPrimary: ${kb.primaryMuscles.join(", ")}\nMistakes: ${kb.commonMistakes.join("; ")}\nBreathing: ${kb.breathing}\nWhy: ${kb.whyInPlan}`
+        : "";
+
+      const response = await callAgent(
+        "conversation",
+        `User is asking about exercise ${action.exerciseId}.${kbStr}`,
+        contextStr
+      );
+      return parseConversationResponse(response);
+    }
+
+    case "pain_report": {
+      const response = await callAgent(
+        "conversation",
+        `User reported ${action.severity}/10 pain in ${action.bodyArea}. Rules engine decision: ${JSON.stringify(rulesDecision)}`,
+        contextStr
+      );
+      return parseConversationResponse(response);
+    }
+
+    case "feedback": {
+      const response = await callAgent(
+        "conversation",
+        `Post-session feedback: user feels "${action.feeling}"${action.exerciseId ? ` about ${action.exerciseId}` : ""}. Rules engine decision: ${JSON.stringify(rulesDecision)}`,
+        contextStr
+      );
+      return parseConversationResponse(response);
+    }
+
+    case "chat_message":
+    case "general_question": {
+      const text = action.type === "chat_message" ? action.text : action.text;
+      const response = await callAgent(
+        "conversation",
+        text,
+        contextStr
+      );
+      return parseConversationResponse(response);
+    }
+
+    case "plan_change_response": {
+      if (action.accepted) {
+        return {
+          id: `msg_${Date.now()}`, role: "arnold", timestamp: now, source: "rules",
+          text: "Done. Plan updated. Changes are live from your next session.",
+        };
+      }
+      return {
+        id: `msg_${Date.now()}`, role: "arnold", timestamp: now, source: "rules",
+        text: "Got it. Keeping the plan as is. Let me know if you change your mind.",
+      };
+    }
+
+    default:
+      return {
+        id: `msg_${Date.now()}`, role: "arnold", timestamp: now, source: "quick",
+        text: "I'm here. What do you need?",
+      };
+  }
+}
+
+// ── Post-Session Analysis (Progress Analyst) ─────────────────────────────────
+
+export async function runPostSessionAnalysis(
+  sessionLog: SessionLog,
+  context: CoachingContext
+): Promise<{
+  findings: Array<{ type: string; details: string }>;
+  planChanges: Array<{ description: string; affectedWeeks: number[] }>;
+}> {
+  const contextStr = JSON.stringify({
+    phase: context.currentPhase,
+    recentSessions: context.recentSessions.slice(-5),
+    progressions: context.activeProgressions,
+    goals: context.userGoals,
+  });
+
+  const response = await callAgent(
+    "progressAnalyst",
+    `Analyze this session: ${JSON.stringify(sessionLog)}`,
+    contextStr
+  );
+
+  try {
+    const cleaned = response.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return { findings: [], planChanges: [] };
+  }
+}
+
+// ── Combined Post-Session Processing ─────────────────────────────────────────
+// Runs after EVERY completed session. Silent adaptation always runs.
+// LLM-based Progress Analyst only runs if the user engaged the chat
+// (otherwise it's wasted cost — silent adaptation handles it).
+
+export async function processCompletedSession(
+  sessionLog: SessionLog,
+  allSessionHistory: SessionLog[],
+  mesocycle: Mesocycle,
+  context: CoachingContext,
+  chatWasEngaged: boolean
+): Promise<{
+  silentAdaptation: SilentAdaptationResult;
+  llmAnalysis: { findings: Array<{ type: string; details: string }>; planChanges: Array<{ description: string; affectedWeeks: number[] }> } | null;
+}> {
+  // 1. ALWAYS run silent adaptation (deterministic, free, fast)
+  const silentAdaptation = processSessionForAdaptation(
+    sessionLog,
+    allSessionHistory,
+    mesocycle,
+    context.activeProgressions
+  );
+
+  // 2. Only run LLM analysis if user engaged the chat (costs ~$0.01-0.03)
+  let llmAnalysis = null;
+  if (chatWasEngaged) {
+    llmAnalysis = await runPostSessionAnalysis(sessionLog, context);
+  }
+
+  return { silentAdaptation, llmAnalysis };
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function parseConversationResponse(raw: string): ChatMessage {
+  const now = new Date().toISOString();
+  const id = `msg_${Date.now()}`;
+
+  // Strategy: try multiple ways to extract a clean message from the LLM response.
+  // The LLM sometimes returns pure JSON, sometimes text + JSON, sometimes just text.
+
+  const trimmed = (raw || "").replace(/```json/g, "").replace(/```/g, "").trim();
+
+  // Attempt 1: Maybe the whole thing is valid JSON
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && parsed.message) {
+      return buildMessage(id, now, parsed.message, parsed.options);
+    }
+  } catch {}
+
+  // Attempt 2: Find JSON object in the string (text before/after JSON)
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const beforeJson = trimmed.substring(0, firstBrace).trim();
+    const jsonCandidate = trimmed.substring(firstBrace, lastBrace + 1);
+
+    try {
+      const parsed = JSON.parse(jsonCandidate);
+      if (parsed && parsed.message) {
+        // Combine any pre-JSON text with the parsed message
+        const fullMessage = beforeJson
+          ? beforeJson + " " + parsed.message
+          : parsed.message;
+        return buildMessage(id, now, fullMessage, parsed.options);
+      }
+    } catch {}
+  }
+
+  // Attempt 3: Regex extract just the "message" field value
+  const msgMatch = trimmed.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (msgMatch && msgMatch[1]) {
+    const extracted = msgMatch[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+    const beforeJson = firstBrace !== -1 ? trimmed.substring(0, firstBrace).trim() : "";
+    const fullMessage = beforeJson ? beforeJson + " " + extracted : extracted;
+    return { id, role: "arnold", timestamp: now, source: "llm", text: fullMessage };
+  }
+
+  // Attempt 4: Just strip any JSON-looking content and return plain text
+  let cleanText = trimmed;
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    cleanText = trimmed.substring(0, firstBrace).trim();
+  }
+  if (!cleanText) cleanText = trimmed;
+
+  return { id, role: "arnold", timestamp: now, source: "llm", text: cleanText };
+}
+
+function buildMessage(
+  id: string,
+  timestamp: string,
+  message: string,
+  rawOptions?: any[]
+): ChatMessage {
+  let options: Array<{ id: string; label: string; action: "followup" | "decision" | "dismiss" | "navigate"; value?: string }> | undefined;
+
+  if (rawOptions && Array.isArray(rawOptions) && rawOptions.length > 0) {
+    const filtered = rawOptions
+      .filter((opt: any) => opt && typeof opt.label === "string" && opt.label.trim() !== "")
+      .map((opt: any, idx: number) => ({
+        id: opt.id || `opt_${Date.now()}_${idx}`,
+        label: opt.label,
+        action: (opt.action || "followup") as "followup" | "decision" | "dismiss" | "navigate",
+        value: opt.value || opt.label.toLowerCase().replace(/\s+/g, "_"),
+      }));
+
+    if (filtered.length > 0) {
+      options = filtered;
+    }
+  }
+
+  return {
+    id,
+    role: "arnold",
+    timestamp,
+    source: "llm",
+    text: message,
+    options,
+  };
+}
