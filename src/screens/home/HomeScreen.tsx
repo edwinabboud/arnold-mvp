@@ -7,18 +7,31 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Pressable,
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  Platform,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
-import { GOAL_META } from "../../data/progressions";
 import { findCurrentSession, getSessionSummary } from "../../utils/sessionFinder";
 import { supabase } from "../../config/supabase";
+
+const formatPathName = (path: string): string => {
+  switch (path) {
+    case "street_lifter": return "Street Lifter";
+    case "skill_builder": return "Skill Builder";
+    case "hybrid_athlete": return "Hybrid Athlete";
+    case "endurance": return "Endurance";
+    default: return path;
+  }
+};
+
+const capitalize = (s: string): string =>
+  s.charAt(0).toUpperCase() + s.slice(1);
+
+const formatPhaseName = (phase: string): string =>
+  phase.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
 export default function HomeScreen({ navigation }: any) {
   const profile = useStore((s) => s.profile);
@@ -27,7 +40,6 @@ export default function HomeScreen({ navigation }: any) {
   const startSession = useStore((s) => s.startSession);
   const sessionHistory = useStore((s) => s.sessionHistory);
 
-  const goals = profile?.goals || [];
   const schedule = profile?.schedule;
 
   const sessionInfo = activeMesocycle ? findCurrentSession(activeMesocycle, sessionHistory) : null;
@@ -173,29 +185,21 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* Goals Summary */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>YOUR GOALS</Text>
-          {goals.map((g) => {
-            const meta = GOAL_META[g.goal];
-            if (!meta) return null;
-            return (
-              <View
-                key={g.goal}
-                style={[styles.goalRow, { borderLeftColor: meta.color }]}
-              >
-                <Text style={styles.goalEmoji}>{meta.emoji}</Text>
-                <View style={styles.goalInfo}>
-                  <Text style={styles.goalLabel}>{meta.label}</Text>
-                  <Text style={styles.goalRank}>
-                    {g.rank === 1 ? "Primary" : g.rank === 2 ? "Secondary" : "Tertiary"}{" "}
-                    — {g.rank === 1 ? "~60%" : g.rank === 2 ? "~30%" : "~10%"} volume
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+        {/* Program Status */}
+        {activeMesocycle && profile?.programPath && (
+          <View style={styles.programStatusRow}>
+            <Text style={styles.programStatusText}>
+              {formatPathName(profile.programPath)}
+              {profile.tier ? ` · ${capitalize(profile.tier)}` : ""}
+              {sessionInfo ? ` · Week ${sessionInfo.weekNumber}` : ""}
+            </Text>
+            {sessionInfo?.session?.phase && (
+              <Text style={styles.programStatusPhase}>
+                {formatPhaseName(sessionInfo.session.phase)}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Schedule */}
         <View style={styles.section}>
@@ -332,7 +336,27 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.accent,
   },
-  // Goals
+  // Program Status
+  programStatusRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  programStatusText: {
+    fontSize: typography.sizes.base,
+    fontWeight: "700",
+    color: colors.text,
+    letterSpacing: 0.3,
+  },
+  programStatusPhase: {
+    fontSize: typography.sizes.xs,
+    fontWeight: "600",
+    color: colors.textMuted,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginTop: spacing.xs,
+  },
+  // Schedule
   section: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
@@ -343,28 +367,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 2,
     marginBottom: spacing.sm,
-  },
-  goalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderLeftWidth: 3,
-    gap: spacing.md,
-  },
-  goalEmoji: { fontSize: 22 },
-  goalInfo: { flex: 1 },
-  goalLabel: {
-    fontSize: typography.sizes.base,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  goalRank: {
-    fontSize: typography.sizes.xs,
-    color: colors.textSecondary,
-    marginTop: 1,
   },
   // Week
   weekRow: {
