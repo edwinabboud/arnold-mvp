@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
-import { PROGRESSIONS, getProgressionTree, GOAL_META } from "../../data/progressions";
+import { PROGRESSIONS, getProgressionTree, PATH_META } from "../../data/progressions";
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
@@ -76,7 +76,7 @@ export default function ProgressScreen() {
   const streaks = useStore((s) => s.streaks);
   const progressions = useStore((s) => s.userProgressions);
   const history = useStore((s) => s.sessionHistory);
-  const goals = useStore((s) => s.onboarding.rankedGoals);
+  const profile = useStore((s) => s.profile);
 
   // Calculate current level per pattern from user progressions
   const patterns = ["pull", "push", "legs", "core", "skill"];
@@ -119,24 +119,18 @@ export default function ProgressScreen() {
           ))}
         </View>
 
-        {/* Goals */}
-        {goals.length > 0 && (
+        {/* Program */}
+        {profile?.programPath && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>YOUR GOALS</Text>
-            {goals.map((g) => {
-              const meta = GOAL_META[g.goal];
-              if (!meta) return null;
-              return (
-                <View key={g.goal} style={[styles.goalRow, { borderLeftColor: meta.color }]}>
-                  <Text style={styles.goalLabel}>{meta.label}</Text>
-                  <Text style={styles.goalRank}>
-                    {g.rank === 1 ? "Primary" : g.rank === 2 ? "Secondary" : "Tertiary"}
-                    {" · "}
-                    {g.rank === 1 ? "~60%" : g.rank === 2 ? "~30%" : "~10%"} volume
-                  </Text>
-                </View>
-              );
-            })}
+            <Text style={styles.sectionTitle}>PROGRAM</Text>
+            <View style={[styles.goalRow, { borderLeftColor: PATH_META[profile.programPath]?.color || colors.accent }]}>
+              <Text style={styles.goalLabel}>
+                {PATH_META[profile.programPath]?.label || profile.programPath}
+              </Text>
+              <Text style={styles.goalRank}>
+                {profile.tier ? profile.tier.charAt(0).toUpperCase() + profile.tier.slice(1) : ""}
+              </Text>
+            </View>
           </View>
         )}
 

@@ -73,9 +73,8 @@ function buildCoachingContext(): CoachingContext {
     recentPainReports: session?.painReports || [],
     activeProgressions: store.userProgressions,
     streaks: store.streaks,
-    userGoals: store.onboarding.rankedGoals.length > 0
-      ? store.onboarding.rankedGoals
-      : [{ goal: 'skill_acquisition' as const, rank: 1 }],
+    programPath: store.profile?.programPath || "hybrid_athlete",
+    tier: store.profile?.tier || "beginner",
     todaysSession: planned || {
       id: 'none',
       weekId: 'none',

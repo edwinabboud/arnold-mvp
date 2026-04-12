@@ -5,10 +5,10 @@
 // =============================================================================
 
 import {
-  GoalPriority,
   PlannedExercise,
   PlannedSession,
   PlanWeek,
+  ProgramPath,
   Schedule,
   DifficultyIntent,
 } from "../types";
@@ -43,10 +43,11 @@ function buildAssessmentExercise(
     name: `TEST: ${prog.name}`,
     sets: prog.isIsometric ? 1 : 2,
     reps: prog.isIsometric
-      ? prog.targetReps // hold for target seconds
-      : Math.ceil(prog.targetReps * 0.75), // slightly reduced for testing
-    restSeconds: 120, // generous rest during assessment
+      ? prog.targetReps
+      : Math.ceil(prog.targetReps * 0.75),
+    restSeconds: 120,
     difficultyIntent: "moderate" as DifficultyIntent,
+    exerciseRole: "main" as const,
     notes: `Assessment — ${prog.isIsometric ? "hold as long as you can" : "do as many clean reps as possible"}. ${prog.cues.join(". ")}.`,
     assessmentType: prog.isIsometric ? "max_hold" : "max_reps",
   };
@@ -83,13 +84,13 @@ const SPLIT_PATTERNS = {
  */
 export function buildAssessmentWeek(
   schedule: Schedule,
-  goals: GoalPriority[]
+  programPath: ProgramPath
 ): PlanWeek {
   const mesocycleId = `meso_${Date.now()}`;
   const weekId = `week_assess_${Date.now()}`;
 
   // Determine which patterns to test based on goals
-  const patternsToTest = getRequiredPatterns(goals);
+  const patternsToTest = getRequiredPatterns(programPath);
 
   // Pick test levels for each pattern (entry, mid, advanced)
   const testExercises = buildTestExercises(patternsToTest);
@@ -112,18 +113,13 @@ export function buildAssessmentWeek(
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function getRequiredPatterns(goals: GoalPriority[]): string[] {
-  // All goals need all patterns, but we prioritize order based on goals
-  const base = ["pull", "push", "legs", "core"];
-  const hasSkills = goals.some(
-    (g) => g.goal === "skill_acquisition" || g.goal === "street_lifting"
-  );
-  if (hasSkills) base.push("skill");
-
-  // Always test skills for intermediate+ users
-  if (!base.includes("skill")) base.push("skill");
-
-  return base;
+function getRequiredPatterns(programPath: ProgramPath): string[] {
+  switch (programPath) {
+    case "street_lifter": return ["pull", "push", "legs", "core"];
+    case "skill_builder": return ["pull", "push", "core", "skill"];
+    case "hybrid_athlete": return ["pull", "push", "legs", "core", "skill"];
+    default: return ["pull", "push", "legs", "core"];
+  }
 }
 
 function buildTestExercises(
@@ -243,6 +239,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
     reps: 30,
     restSeconds: 0,
     difficultyIntent: "easy",
+    exerciseRole: "warmup" as const,
     notes: "Get the blood flowing",
   });
 
@@ -254,6 +251,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
     reps: 20,
     restSeconds: 0,
     difficultyIntent: "easy",
+    exerciseRole: "warmup" as const,
     notes: "10 forward, 10 backward",
   });
 
@@ -267,6 +265,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
       reps: 10,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "warmup" as const,
       notes: "Protract and retract at top of push-up position",
     });
   }
@@ -280,6 +279,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
       reps: 15,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "warmup" as const,
       notes: "Squeeze shoulder blades together",
     });
     warmup.push({
@@ -290,6 +290,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
       reps: 20,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "warmup" as const,
       notes: "20-second hang — open up the shoulders",
     });
   }
@@ -303,6 +304,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
       reps: 20,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "warmup" as const,
       notes: "10 per leg, front to back",
     });
   }
@@ -316,6 +318,7 @@ function buildAssessmentWarmup(patterns: string[]): PlannedExercise[] {
       reps: 10,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "warmup" as const,
       notes: "Circles, flexion, extension — protect your wrists",
     });
   }
@@ -335,6 +338,7 @@ function buildCooldown(patterns: string[]): PlannedExercise[] {
       reps: 30,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "cooldown" as const,
       notes: "30 seconds per side — cross-body and overhead",
     });
   }
@@ -348,6 +352,7 @@ function buildCooldown(patterns: string[]): PlannedExercise[] {
       reps: 30,
       restSeconds: 0,
       difficultyIntent: "easy",
+      exerciseRole: "cooldown" as const,
       notes: "30 seconds per side — lunge position",
     });
   }
@@ -360,6 +365,7 @@ function buildCooldown(patterns: string[]): PlannedExercise[] {
     reps: 30,
     restSeconds: 0,
     difficultyIntent: "easy",
+    exerciseRole: "cooldown" as const,
     notes: "Decompress the spine. Breathe.",
   });
 

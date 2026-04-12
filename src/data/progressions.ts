@@ -128,6 +128,3 @@ export const PATH_META: Record<
     available: false, // Coming soon — no program bible yet
   },
 };
-
-/** @deprecated Use PATH_META instead */
-export const GOAL_META = PATH_META;

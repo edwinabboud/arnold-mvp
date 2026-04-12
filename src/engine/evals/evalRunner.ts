@@ -148,7 +148,8 @@ export async function runSingleEval(scenario: EvalScenario): Promise<EvalResult>
       streakFreezes: 0,
       milestones: [],
     },
-    userGoals: [{ goal: "skill_acquisition" as const, rank: 1 }],
+    programPath: "skill_builder" as const,
+    tier: "beginner" as const,
     todaysSession: {
       id: "eval_session",
       weekId: "eval_week",

@@ -10,7 +10,6 @@
 import {
   CoachingContext,
   CoachingDecision,
-  GoalPriority,
   Mesocycle,
   PainReport,
   PlanPhase,
@@ -195,7 +194,8 @@ export async function routeInteraction(
   const now = new Date().toISOString();
   const contextStr = JSON.stringify({
     phase: coachingContext.currentPhase,
-    goals: coachingContext.userGoals,
+    programPath: coachingContext.programPath,
+    tier: coachingContext.tier,
     todaySession: coachingContext.todaysSession?.label,
     recentSessions: coachingContext.recentSessions.length,
     streakDays: coachingContext.streaks.currentDaily,
@@ -281,7 +281,8 @@ export async function runPostSessionAnalysis(
     phase: context.currentPhase,
     recentSessions: context.recentSessions.slice(-5),
     progressions: context.activeProgressions,
-    goals: context.userGoals,
+    programPath: context.programPath,
+    tier: context.tier,
   });
 
   const response = await callAgent(

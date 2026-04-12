@@ -6,7 +6,6 @@
 
 import { supabase } from "../config/supabase";
 import {
-  GoalPriority,
   Mesocycle,
   Schedule,
   SessionLog,
@@ -27,13 +26,7 @@ async function getUserId(): Promise<string | null> {
 
 export async function syncProfile(
   profile: UserProfile,
-  onboardingState?: {
-    step: string;
-    selectedGoals: string[];
-    rankedGoals: GoalPriority[];
-    schedule: Schedule | null;
-    targets: UserGoalTarget[];
-  }
+  onboardingState?: Record<string, any>
 ): Promise<void> {
   try {
     const userId = await getUserId();
@@ -42,7 +35,8 @@ export async function syncProfile(
     const { error } = await supabase.from("profiles").upsert({
       id: userId,
       display_name: profile.displayName,
-      goals: profile.goals,
+      program_path: profile.programPath,
+      tier: profile.tier,
       schedule: profile.schedule,
       targets: profile.targets,
       assessment_complete: profile.assessmentComplete,
@@ -66,7 +60,7 @@ export async function syncMesocycle(mesocycle: Mesocycle): Promise<void> {
       id: mesocycle.id,
       user_id: userId,
       duration_weeks: mesocycle.durationWeeks,
-      primary_goal: mesocycle.primaryGoal,
+      primary_goal: mesocycle.programPath,
       plan_data: mesocycle,
     }, { onConflict: "id,user_id" });
 
@@ -140,13 +134,7 @@ export async function syncSessionLog(log: SessionLog): Promise<void> {
 
 export async function syncFullState(state: {
   profile: UserProfile | null;
-  onboarding?: {
-    step: string;
-    selectedGoals: string[];
-    rankedGoals: GoalPriority[];
-    schedule: Schedule | null;
-    targets: UserGoalTarget[];
-  };
+  onboarding?: Record<string, any>;
   activeMesocycle: Mesocycle | null;
   userProgressions: UserProgression[];
   streaks: StreakData;
@@ -210,7 +198,11 @@ export async function hydrateFromSupabase(): Promise<{
         id: userId,
         createdAt: p.created_at,
         displayName: p.display_name || "",
-        goals: p.goals || [],
+        programPath: p.program_path || "hybrid_athlete",
+        tier: p.tier || "beginner",
+        bodyweightKg: p.bodyweight_kg,
+        benchmarks: p.benchmarks,
+        experienceLevel: p.experience_level,
         schedule: p.schedule || { daysPerWeek: 3, split: "full_body", preferredDays: [], sessionDurationMin: 60 },
         targets: p.targets || [],
         assessmentComplete: p.assessment_complete ?? false,

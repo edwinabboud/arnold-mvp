@@ -6,13 +6,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  GoalPriority,
   Mesocycle,
   PainReport,
   PlannedSession,
+  ProgramPath,
   Schedule,
   SessionLog,
   StreakData,
+  TrainerTier,
   UserGoalTarget,
   UserProfile,
   UserProgression,
@@ -28,7 +29,9 @@ import { syncProfile, syncMesocycle, syncProgressions, syncStreaks, syncSessionL
 interface OnboardingState {
   step: "goals" | "ranking" | "schedule" | "targets" | "assessment_intro" | "done";
   selectedGoals: string[];
-  rankedGoals: GoalPriority[];
+  rankedGoals: Array<{ goal: string; rank: number }>; // deprecated — kept for compat
+  programPath: ProgramPath | null;
+  tier: TrainerTier | null;
   schedule: Schedule | null;
   targets: UserGoalTarget[];
 }
@@ -59,7 +62,8 @@ interface ArnoldStore {
   onboarding: OnboardingState;
   setOnboardingStep: (step: OnboardingState["step"]) => void;
   toggleGoal: (goalId: string) => void;
-  setRankedGoals: (goals: GoalPriority[]) => void;
+  /** @deprecated — kept for onboarding compat */
+  setRankedGoals: (goals: Array<{ goal: string; rank: number }>) => void;
   setSchedule: (schedule: Schedule) => void;
   addTarget: (target: UserGoalTarget) => void;
   completeOnboarding: () => void;
@@ -102,6 +106,8 @@ const initialOnboarding: OnboardingState = {
   step: "goals",
   selectedGoals: [],
   rankedGoals: [],
+  programPath: null,
+  tier: null,
   schedule: null,
   targets: [],
 };
