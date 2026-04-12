@@ -803,6 +803,10 @@ export default function ConversationalOnboarding({ navigation }: any) {
             programPath={(selectedPath || "hybrid_athlete") as any}
             onBack={() => goToStep(8)}
             onComplete={({ experienceLevel: exp, benchmarks: bm }) => {
+              // Inject bodyweight from earlier onboarding step
+              if (!bm.bodyweightKg && userWeight) {
+                bm.bodyweightKg = parseFloat(userWeight) || undefined;
+              }
               setCollectedExperienceLevel(exp);
               setCollectedBenchmarks(bm);
               handleComplete(exp, bm);

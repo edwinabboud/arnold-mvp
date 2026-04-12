@@ -192,15 +192,6 @@ const STREET_LIFTER_QUESTIONS: Question[] = [
     weightLabel: "Added weight",
     weightMax: 150,
   },
-  {
-    id: "bodyweight",
-    title: "Your bodyweight",
-    subtitle: "Used to calculate relative strength",
-    type: "number",
-    unit: "kg",
-    min: 30,
-    max: 200,
-  },
 ];
 
 const SKILL_BUILDER_QUESTIONS: Question[] = [
@@ -255,7 +246,6 @@ const SKILL_BUILDER_QUESTIONS: Question[] = [
 const HYBRID_QUESTIONS: Question[] = [
   STREET_LIFTER_QUESTIONS[0], // pullups
   STREET_LIFTER_QUESTIONS[1], // dips
-  STREET_LIFTER_QUESTIONS[3], // bodyweight
   SKILL_BUILDER_QUESTIONS[0], // handstand
   SKILL_BUILDER_QUESTIONS[1], // frontLever
 ];
@@ -376,9 +366,6 @@ export default function BenchmarkInput({ programPath, onComplete, onBack }: Benc
     if (repsValues["squat"] !== undefined && repsValues["squat"] !== "") {
       benchmarks.squatMaxReps = parseNum(repsValues["squat"]);
       benchmarks.squatAddedKg = parseNum(weightValues["squat"] || "") ?? 0;
-    }
-    if (numberValues["bodyweight"] !== undefined && numberValues["bodyweight"] !== "") {
-      benchmarks.bodyweightKg = parseNum(numberValues["bodyweight"]);
     }
     if (numberValues["handstand"] !== undefined && numberValues["handstand"] !== "") {
       benchmarks.handstandHoldSec = parseNum(numberValues["handstand"]);
