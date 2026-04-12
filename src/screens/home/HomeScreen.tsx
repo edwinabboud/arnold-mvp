@@ -33,6 +33,12 @@ const capitalize = (s: string): string =>
 const formatPhaseName = (phase: string): string =>
   phase.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
+const getSessionType = (sessionName: string): string => {
+  const match = sessionName.match(/\(([^)]+)\)$/);
+  if (match) return match[1].toLowerCase();
+  return "full body";
+};
+
 export default function HomeScreen({ navigation }: any) {
   const profile = useStore((s) => s.profile);
   const streaks = useStore((s) => s.streaks);
@@ -124,6 +130,22 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         </View>
 
+        {/* Program Status */}
+        {activeMesocycle && profile?.programPath && (
+          <View style={styles.programStatusRow}>
+            <Text style={styles.programStatusText}>
+              {formatPathName(profile.programPath)}
+              {profile.tier ? ` · ${capitalize(profile.tier)}` : ""}
+              {sessionInfo ? ` · Week ${sessionInfo.weekNumber}` : ""}
+            </Text>
+            {sessionInfo?.session?.phase && (
+              <Text style={styles.programStatusPhase}>
+                {formatPhaseName(sessionInfo.session.phase)}
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Session CTA */}
         {sessionInfo ? (
           <TouchableOpacity
@@ -135,22 +157,18 @@ export default function HomeScreen({ navigation }: any) {
             activeOpacity={0.8}
             onPress={sessionInfo.isToday && !sessionInfo.isCompleted ? handleStartSession : undefined}
           >
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm }}>
-              <View style={[
-                styles.sessionBadge,
-                !sessionInfo.isToday && { backgroundColor: "rgba(255,255,255,0.06)" },
-                sessionInfo.isCompleted && { backgroundColor: "#34C75915" },
+            <View style={[
+              styles.sessionBadge,
+              !sessionInfo.isToday && { backgroundColor: "rgba(255,255,255,0.06)" },
+              sessionInfo.isCompleted && { backgroundColor: "#34C75915" },
+              { marginBottom: spacing.sm },
+            ]}>
+              <Text style={[
+                styles.sessionBadgeText,
+                !sessionInfo.isToday && { color: colors.textSecondary },
+                sessionInfo.isCompleted && { color: "#34C759" },
               ]}>
-                <Text style={[
-                  styles.sessionBadgeText,
-                  !sessionInfo.isToday && { color: colors.textSecondary },
-                  sessionInfo.isCompleted && { color: "#34C759" },
-                ]}>
-                  {sessionInfo.isCompleted ? "COMPLETED ✓" : sessionInfo.isToday ? "TODAY" : `NEXT: ${sessionInfo.dayLabel.toUpperCase()}`}
-                </Text>
-              </View>
-              <Text style={{ fontSize: 10, fontWeight: "600", color: colors.textMuted, letterSpacing: 1 }}>
-                WEEK {sessionInfo.weekNumber} · {sessionInfo.phase.toUpperCase()}
+                {sessionInfo.isCompleted ? "COMPLETED ✓" : sessionInfo.isToday ? "TODAY" : `NEXT: ${sessionInfo.dayLabel.toUpperCase()}`}
               </Text>
             </View>
             <Text style={styles.sessionTitle}>{sessionInfo.session.label}</Text>
@@ -163,7 +181,7 @@ export default function HomeScreen({ navigation }: any) {
               </Text>
               <Text style={styles.sessionMetaDot}>·</Text>
               <Text style={styles.sessionMetaText}>
-                {schedule?.split?.replace(/_/g, " ") || "Full body"}
+                {getSessionType(sessionInfo.session.label)}
               </Text>
             </View>
             {sessionInfo.isToday && (
@@ -182,22 +200,6 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={{ fontSize: typography.sizes.sm, color: colors.textMuted, marginTop: spacing.xs, textAlign: "center" }}>
               Complete onboarding to get your training plan
             </Text>
-          </View>
-        )}
-
-        {/* Program Status */}
-        {activeMesocycle && profile?.programPath && (
-          <View style={styles.programStatusRow}>
-            <Text style={styles.programStatusText}>
-              {formatPathName(profile.programPath)}
-              {profile.tier ? ` · ${capitalize(profile.tier)}` : ""}
-              {sessionInfo ? ` · Week ${sessionInfo.weekNumber}` : ""}
-            </Text>
-            {sessionInfo?.session?.phase && (
-              <Text style={styles.programStatusPhase}>
-                {formatPhaseName(sessionInfo.session.phase)}
-              </Text>
-            )}
           </View>
         )}
 
@@ -340,7 +342,7 @@ const styles = StyleSheet.create({
   programStatusRow: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: 4,
   },
   programStatusText: {
     fontSize: typography.sizes.base,
