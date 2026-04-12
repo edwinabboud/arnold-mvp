@@ -909,8 +909,8 @@ const styles = StyleSheet.create({
   exerciseScroll: { flex: 1 },
   exerciseContent: {
     paddingHorizontal: spacing.md,
-    paddingTop: 120,
-    paddingBottom: 200,
+    paddingTop: 16,
+    paddingBottom: 120,
   },
 
   // Session complete

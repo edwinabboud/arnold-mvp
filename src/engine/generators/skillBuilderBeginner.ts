@@ -58,6 +58,17 @@ function getVolumeFallback(progressionId: string, levelsBelow: number): string {
   return tree[targetIdx].id;
 }
 
+function resolveVolume(mainId: string, levelsBelow: number): string {
+  const volumeId = getVolumeFallback(mainId, levelsBelow);
+  if (volumeId === mainId) {
+    const prog = PROGRESSIONS.find(p => p.id === mainId);
+    if (prog?.pattern === "pull") return "acc_rows";
+    if (prog?.pattern === "push") return "acc_weighted_pushups";
+    if (prog?.pattern === "legs") return "acc_lunges";
+  }
+  return volumeId;
+}
+
 function getName(id: string): string {
   const prog = PROGRESSIONS.find(p => p.id === id);
   if (prog) return prog.name;
@@ -224,8 +235,8 @@ function buildSessionA(
   const pushTree = getProgressionTree("push");
   const pushIdx = pushTree.findIndex(p => p.id === pushId);
   const dipIdx = pushTree.findIndex(p => p.id === "push_07");
-  // Use dips if user is at that level, otherwise use a push variant 2 below current
-  const dipId = (dipIdx >= 0 && pushIdx >= dipIdx) ? "push_07" : getVolumeFallback(pushId, 2);
+  // Use dips if user is at that level, otherwise use a push variant 2 below current (no duplicates)
+  const dipId = (dipIdx >= 0 && pushIdx >= dipIdx) ? "push_07" : resolveVolume(pushId, 2);
 
   const exercises: PlannedExercise[] = [
     // Skill FIRST
@@ -270,8 +281,8 @@ function buildSessionB(
   const diff: DifficultyIntent = isDeload ? "easy" : "challenging";
   const modDiff: DifficultyIntent = isDeload ? "easy" : "moderate";
 
-  // Row: use pull tree 2 levels below, or Australian Rows (pull_01) at bottom
-  const rowId = getVolumeFallback(pullId, 2);
+  // Row: use pull tree 2 levels below, substitute accessory if duplicate
+  const rowId = resolveVolume(pullId, 2);
 
   const exercises: PlannedExercise[] = [
     // Skill FIRST
@@ -280,8 +291,7 @@ function buildSessionB(
     // Main strength
     makeExercise(1, weekId, pullId, null, "main", sets, waveReps, 120, diff),
     // Volume
-    makeExercise(2, weekId, rowId, null, "volume", sets, isDeload ? 8 : 10, 90, modDiff,
-      rowId === pullId ? { notes: "Higher reps for volume" } : undefined),
+    makeExercise(2, weekId, rowId, null, "volume", sets, isDeload ? 8 : 10, 90, modDiff),
     makeExercise(3, weekId, "supplementary_active_hang", "Dead Hang (Active Shoulders)", "volume", sets, isDeload ? 20 : 30, 60, modDiff,
       { holdSeconds: isDeload ? 20 : 30 }),
     // Accessories

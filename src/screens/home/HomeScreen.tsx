@@ -34,8 +34,24 @@ const formatPhaseName = (phase: string): string =>
   phase.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
 const getSessionType = (sessionName: string): string => {
+  const name = sessionName.toLowerCase();
+
+  if (name.includes("pull") && name.includes("push")) return "push + pull";
+  if (name.includes("pull")) return "pull";
+  if (name.includes("push")) return "push";
+  if (name.includes("peak")) return "peak";
+  if (name.includes("full body")) return "full body";
+  if (name.includes("legs") || name.includes("leg")) return "legs";
+  if (name.includes("skill")) return "skill";
+  if (name.includes("upper")) return "upper";
+  if (name.includes("hybrid")) return "hybrid";
+
   const match = sessionName.match(/\(([^)]+)\)$/);
-  if (match) return match[1].toLowerCase();
+  if (match) {
+    const inner = match[1].toLowerCase();
+    if (inner.length > 1) return inner;
+  }
+
   return "full body";
 };
 

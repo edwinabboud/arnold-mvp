@@ -60,6 +60,24 @@ function getVolumeFallback(progressionId: string, levelsBelow: number): string {
   return tree[targetIdx].id;
 }
 
+/** Returns an accessory substitute when volume resolves to the same as main */
+function getVolumeSubstitute(pattern: string): string {
+  if (pattern === "pull") return "acc_rows";
+  if (pattern === "push") return "acc_weighted_pushups";
+  if (pattern === "legs") return "acc_lunges";
+  return "acc_rows";
+}
+
+/** Get volume exercise — substitutes an accessory if it would duplicate main */
+function resolveVolume(mainId: string, levelsBelow: number): string {
+  const volumeId = getVolumeFallback(mainId, levelsBelow);
+  if (volumeId === mainId) {
+    const prog = PROGRESSIONS.find(p => p.id === mainId);
+    return getVolumeSubstitute(prog?.pattern || "pull");
+  }
+  return volumeId;
+}
+
 /** Look up a progression's name, fallback to ID */
 function getName(id: string): string {
   const prog = PROGRESSIONS.find(p => p.id === id);
@@ -203,12 +221,11 @@ function buildSessionA(
   const sets = isDeload ? 2 : 3;
   const diff: DifficultyIntent = isDeload ? "easy" : "challenging";
   const modDiff: DifficultyIntent = isDeload ? "easy" : "moderate";
-  const pullVolumeId = getVolumeFallback(pullId, 2);
+  const pullVolumeId = resolveVolume(pullId, 2);
 
   const exercises: PlannedExercise[] = [
     makeExercise(0, weekId, pullId, "main", sets, waveReps, 180, diff),
-    makeExercise(1, weekId, pullVolumeId, "volume", sets, isDeload ? 8 : 10, 90, modDiff,
-      pullVolumeId === pullId ? "Higher reps for volume" : undefined),
+    makeExercise(1, weekId, pullVolumeId, "volume", sets, isDeload ? 8 : 10, 90, modDiff),
     makeExercise(2, weekId, pushId, "complementary", sets, waveReps, 120, modDiff),
     makeExercise(3, weekId, coreId, "accessory", sets, isDeload ? 10 : 12, 60, "easy"),
     makeExercise(4, weekId, legsId, "accessory", sets, isDeload ? 10 : 12, 60, "easy"),
@@ -240,15 +257,14 @@ function buildSessionB(
   const sets = isDeload ? 2 : 3;
   const diff: DifficultyIntent = isDeload ? "easy" : "challenging";
   const modDiff: DifficultyIntent = isDeload ? "easy" : "moderate";
-  const pushVolumeId = getVolumeFallback(pushId, 2);
+  const pushVolumeId = resolveVolume(pushId, 2);
 
   // core_02 = Hollow Body Hold (isometric, 20-30s)
   const hollowId = "core_02";
 
   const exercises: PlannedExercise[] = [
     makeExercise(0, weekId, pushId, "main", sets, waveReps, 180, diff),
-    makeExercise(1, weekId, pushVolumeId, "volume", sets, isDeload ? 8 : 10, 90, modDiff,
-      pushVolumeId === pushId ? "Higher reps for volume" : undefined),
+    makeExercise(1, weekId, pushVolumeId, "volume", sets, isDeload ? 8 : 10, 90, modDiff),
     makeExercise(2, weekId, pullId, "complementary", sets, waveReps, 120, modDiff),
     makeExercise(3, weekId, "acc_face_pulls", "accessory", sets, 15, 60, "easy"),
     makeExercise(4, weekId, hollowId, "accessory", sets, isDeload ? 20 : 25, 60, "easy"),
