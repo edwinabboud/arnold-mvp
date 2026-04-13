@@ -14,10 +14,12 @@ import {
   PlannedExercise,
   PlannedSession,
   Schedule,
+  UserBenchmarks,
   UserProgression,
 } from "../../types";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
+import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -519,16 +521,49 @@ function buildUpperVolume(
     warmUpExercises: getWarmup("push", prefix), cooldownExercises: getCooldown("push", prefix) };
 }
 
+// ── Weight Stamping ─────────────────────────────────────────────────────────
+
+function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
+  const id = exerciseId.toLowerCase();
+  if (id.includes("pull") || id.includes("chin") || id.includes("row")) return "pulling";
+  if (id.includes("dip") || id.includes("push") || id.includes("hspu")) return "pushing";
+  if (id.includes("squat") || id.includes("lunge") || id.includes("pistol")) return "legs";
+  return null;
+}
+
+function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
+  let rampIdx = 0;
+  let lastRampProgId = "";
+  for (const ex of session.exercises) {
+    const pattern = getPattern(ex.progressionId);
+    if (!pattern) continue;
+    if (ex.exerciseRole === "warmup" || ex.exerciseRole === "cooldown" || ex.exerciseRole === "skill") continue;
+
+    if (ex.exerciseRole === "ramp_up") {
+      if (ex.progressionId !== lastRampProgId) {
+        rampIdx = 0;
+        lastRampProgId = ex.progressionId;
+      }
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx);
+      rampIdx++;
+    } else {
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
+    }
+  }
+}
+
 // ── Main Generator ──────────────────────────────────────────────────────────
 
 export function generateHybridAthleteIntermediate(
   userId: string,
   schedule: Schedule,
   progressions: UserProgression[],
+  benchmarks?: UserBenchmarks,
 ): Mesocycle {
   const mesoId = `meso_hyb_int_${Date.now()}`;
   const daysPerWeek = schedule.daysPerWeek;
   const structure = daysPerWeek >= 5 ? "B" : "A";
+  const e1rm = benchmarks ? buildE1RMProfile(benchmarks) : null;
 
   const coreId = getActiveProgression("core", progressions);
   const skillId = getActiveProgression("skill", progressions);
@@ -547,33 +582,35 @@ export function generateHybridAthleteIntermediate(
       const sessions: PlannedSession[] = [];
       const days = schedule.preferredDays.slice(0, Math.min(daysPerWeek, structure === "B" ? 5 : 4));
 
+      const stamp = (s: PlannedSession) => { if (e1rm) stampWeights(s, e1rm); return s; };
+
       if (structure === "A") {
         // Structure A: bolt-on (3-4 days)
         if (days.length >= 1) {
           const s1 = buildHeavyDips(weekId, days[0], block.phase, weekInPhase, isDeload);
           appendPushSkillBoltOn(s1, isDeload, isSpecOrTest);
-          sessions.push(s1);
+          sessions.push(stamp(s1));
         }
         if (days.length >= 2) {
           const s2 = buildHeavyPullups(weekId, days[1], block.phase, weekInPhase, isDeload);
           appendPullSkillBoltOn(s2, coreId, isDeload, isSpecOrTest);
-          sessions.push(s2);
+          sessions.push(stamp(s2));
         }
         if (days.length >= 3) {
           const s3 = buildPeakSingles(weekId, days[2], block.phase, weekInPhase, isDeload);
           appendLsitBoltOn(s3, coreId, isDeload);
-          sessions.push(s3);
+          sessions.push(stamp(s3));
         }
         if (days.length >= 4) {
-          sessions.push(buildSkillDay(weekId, days[3], block.phase, isDeload, coreId, skillId));
+          sessions.push(stamp(buildSkillDay(weekId, days[3], block.phase, isDeload, coreId, skillId)));
         }
       } else {
         // Structure B: PPL + Skill + Upper Volume (5 days)
-        if (days.length >= 1) sessions.push(buildHeavyDips(weekId, days[0], block.phase, weekInPhase, isDeload));
-        if (days.length >= 2) sessions.push(buildLegsDay(weekId, days[1], block.phase, weekInPhase, isDeload, legsId, coreId));
-        if (days.length >= 3) sessions.push(buildHeavyPullups(weekId, days[2], block.phase, weekInPhase, isDeload));
-        if (days.length >= 4) sessions.push(buildSkillDay(weekId, days[3], block.phase, isDeload, coreId, skillId));
-        if (days.length >= 5) sessions.push(buildUpperVolume(weekId, days[4], block.phase, isDeload, coreId, skillId));
+        if (days.length >= 1) sessions.push(stamp(buildHeavyDips(weekId, days[0], block.phase, weekInPhase, isDeload)));
+        if (days.length >= 2) sessions.push(stamp(buildLegsDay(weekId, days[1], block.phase, weekInPhase, isDeload, legsId, coreId)));
+        if (days.length >= 3) sessions.push(stamp(buildHeavyPullups(weekId, days[2], block.phase, weekInPhase, isDeload)));
+        if (days.length >= 4) sessions.push(stamp(buildSkillDay(weekId, days[3], block.phase, isDeload, coreId, skillId)));
+        if (days.length >= 5) sessions.push(stamp(buildUpperVolume(weekId, days[4], block.phase, isDeload, coreId, skillId)));
       }
 
       weeks.push({ id: weekId, mesocycleId: mesoId, weekNumber, phase: block.phase, sessions });

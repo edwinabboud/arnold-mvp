@@ -140,6 +140,11 @@ function ExerciseCard({
               {exercise.name}
             </Text>
           </View>
+          {exercise.addedWeightKg != null && exercise.addedWeightKg > 0 && (
+            <Text style={isCurrent ? cardStyles.activeWeight : cardStyles.inactiveWeight}>
+              +{exercise.addedWeightKg}kg
+            </Text>
+          )}
           <Text style={[cardStyles.meta, isCurrent && cardStyles.metaCurrent, isDone && { opacity: 0.4 }]}>
             {exercise.sets} sets × {progression?.isIsometric ? `${exercise.reps}s hold` : `${exercise.reps} reps`}
             {isCurrent && ` · ${exercise.restSeconds}s rest`}
@@ -226,6 +231,19 @@ const cardStyles = StyleSheet.create({
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   checkmark: { fontSize: 13, color: colors.success },
   name: { fontSize: 15, fontWeight: "700", color: colors.text },
+  activeWeight: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.accent,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  inactiveWeight: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.accent,
+    marginTop: 2,
+  },
   nameDone: {
     color: "rgba(255,255,255,0.25)",
     textDecorationLine: "line-through",
@@ -284,14 +302,12 @@ function ExerciseRow({ exercise, showRest }: { exercise: PlannedExercise; showRe
     <View style={fwStyles.exerciseRow}>
       <View style={{ flex: 1 }}>
         <Text style={fwStyles.exerciseName}>{exercise.name}</Text>
+        {weight && <Text style={fwStyles.weightText}>{weight}</Text>}
         {showRest && exercise.restSeconds > 0 && (
           <Text style={fwStyles.restText}>{exercise.restSeconds}s rest</Text>
         )}
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        {weight && <Text style={fwStyles.weightText}>{weight}</Text>}
-        <Text style={fwStyles.setsReps}>{setsReps}</Text>
-      </View>
+      <Text style={fwStyles.setsReps}>{setsReps}</Text>
     </View>
   );
 }
@@ -382,7 +398,7 @@ const fwStyles = StyleSheet.create({
   exerciseName: { fontSize: 16, fontWeight: "600", color: colors.text },
   restText: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   setsReps: { fontSize: 14, color: colors.textSecondary },
-  weightText: { fontSize: 14, fontWeight: "700", color: colors.accent },
+  weightText: { fontSize: 16, fontWeight: "700", color: colors.accent, marginTop: 2 },
   summary: { paddingHorizontal: 20, paddingVertical: 24, alignItems: "center" },
   summaryText: { fontSize: 14, color: colors.textMuted },
 });
@@ -770,6 +786,9 @@ export default function SessionScreen({ navigation, route }: any) {
                 {PROGRESSIONS.find((p) => p.id === currentEx.progressionId)?.isIsometric
                   ? `${currentEx.reps}s hold`
                   : `${currentEx.reps} reps`}
+                {currentEx.addedWeightKg != null && currentEx.addedWeightKg > 0
+                  ? ` · +${currentEx.addedWeightKg}kg`
+                  : ""}
               </Text>
               <View style={styles.controlRow}>
                 {/* Pain button — opens chat with pain flow */}

@@ -32,7 +32,7 @@ import { generateSkillBuilderIntermediate } from "../../engine/generators/skillB
 import { generateHybridAthleteIntermediate } from "../../engine/generators/hybridAthleteIntermediate";
 import BenchmarkInput from "./BenchmarkInput";
 import { assignTier } from "../../engine/tierAssignment";
-import type { UserBenchmarks } from "../../types";
+import type { UserBenchmarks, FrontLeverLevel, PlancheLevel } from "../../types";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -378,15 +378,15 @@ export default function ConversationalOnboarding({ navigation }: any) {
     if (selectedPath === "street_lifter") {
       mesocycle = tier === "beginner"
         ? generateStreetLifterBeginner(userId, planSchedule, userProgs)
-        : generateStreetLifterIntermediate(userId, planSchedule, userProgs);
+        : generateStreetLifterIntermediate(userId, planSchedule, userProgs, bm);
     } else if (selectedPath === "skill_builder") {
       mesocycle = tier === "beginner"
         ? generateSkillBuilderBeginner(userId, planSchedule, userProgs)
-        : generateSkillBuilderIntermediate(userId, planSchedule, userProgs);
+        : generateSkillBuilderIntermediate(userId, planSchedule, userProgs, bm);
     } else if (selectedPath === "hybrid_athlete") {
       mesocycle = tier === "beginner"
         ? generateHybridAthleteBeginner(userId, planSchedule, userProgs)
-        : generateHybridAthleteIntermediate(userId, planSchedule, userProgs);
+        : generateHybridAthleteIntermediate(userId, planSchedule, userProgs, bm);
     } else {
       // Fallback to old generator for paths not yet implemented
       const planGoals = rankedGoals.map((goalId, idx) => ({ goal: goalId as any, rank: idx + 1 }));
@@ -613,6 +613,49 @@ export default function ConversationalOnboarding({ navigation }: any) {
                 );
               })}
             </ScrollView>
+
+            {__DEV__ && (
+              <TouchableOpacity
+                style={{
+                  marginTop: 12,
+                  padding: 16,
+                  borderRadius: 12,
+                  borderWidth: 1.5,
+                  borderColor: "rgba(255,0,0,0.3)",
+                  backgroundColor: "rgba(255,0,0,0.05)",
+                }}
+                onPress={() => {
+                  const devBm: UserBenchmarks = {
+                    pullUpMaxReps: 12,
+                    pullUpAddedKg: 10,
+                    dipMaxReps: 15,
+                    dipAddedKg: 15,
+                    squatMaxReps: 20,
+                    squatAddedKg: 0,
+                    bodyweightKg: 75,
+                    handstandHoldSec: 20,
+                    handstandWallOnly: false,
+                    frontLeverLevel: "tuck" as FrontLeverLevel,
+                    plancheLevel: "lean" as PlancheLevel,
+                    lSitHoldSec: 12,
+                    collectedAt: new Date().toISOString(),
+                    source: "onboarding" as const,
+                  };
+                  setSelectedPath("street_lifter");
+                  setTrainingDays(3);
+                  setSelectedDays([1, 3, 5]);
+                  setTimeout(() => handleComplete("experienced", devBm), 50);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: "#ff4444", fontSize: 16, fontWeight: "700" }}>
+                  DEV SKIP → Street Lifter Intermediate
+                </Text>
+                <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 4 }}>
+                  Skips all onboarding. 3 days/week, intermediate benchmarks.
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
 

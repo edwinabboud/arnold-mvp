@@ -14,10 +14,12 @@ import {
   PlannedExercise,
   PlannedSession,
   Schedule,
+  UserBenchmarks,
   UserProgression,
 } from "../../types";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
+import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -437,18 +439,37 @@ function buildSessionD(
   };
 }
 
+// ── Weight Stamping ─────────────────────────────────────────────────────────
+
+function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
+  const id = exerciseId.toLowerCase();
+  if (id.includes("pull") || id.includes("chin") || id.includes("row")) return "pulling";
+  if (id.includes("dip") || id.includes("push") || id.includes("hspu")) return "pushing";
+  if (id.includes("squat") || id.includes("lunge") || id.includes("pistol")) return "legs";
+  return null;
+}
+
+function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
+  for (const ex of session.exercises) {
+    const pattern = getPattern(ex.progressionId);
+    if (!pattern) continue;
+    if (ex.exerciseRole === "warmup" || ex.exerciseRole === "cooldown" || ex.exerciseRole === "skill") continue;
+    ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
+  }
+}
+
 // ── Main Generator ──────────────────────────────────────────────────────────
 
 export function generateSkillBuilderIntermediate(
   userId: string,
   schedule: Schedule,
   progressions: UserProgression[],
+  benchmarks?: UserBenchmarks,
 ): Mesocycle {
   const mesoId = `meso_skb_int_${Date.now()}`;
-  // 3 days: A, B, D (no pure skill day)
-  // 4+ days: A, B, C, D
   const sessionsPerWeek = Math.min(schedule.daysPerWeek, 4);
   const includePureSkill = sessionsPerWeek >= 4;
+  const e1rm = benchmarks ? buildE1RMProfile(benchmarks) : null;
 
   const pullId = getActiveProgression("pull", progressions);
   const pushId = getActiveProgression("push", progressions);
@@ -476,7 +497,9 @@ export function generateSkillBuilderIntermediate(
           (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
         ];
         for (let s = 0; s < days.length; s++) {
-          sessions.push(builders[s % 4](days[s]));
+          const session = builders[s % 4](days[s]);
+          if (e1rm) stampWeights(session, e1rm);
+          sessions.push(session);
         }
       } else {
         // 3-day: A, B, D (skip pure skill)
@@ -486,7 +509,9 @@ export function generateSkillBuilderIntermediate(
           (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
         ];
         for (let s = 0; s < days.length; s++) {
-          sessions.push(builders[s % 3](days[s]));
+          const session = builders[s % 3](days[s]);
+          if (e1rm) stampWeights(session, e1rm);
+          sessions.push(session);
         }
       }
 

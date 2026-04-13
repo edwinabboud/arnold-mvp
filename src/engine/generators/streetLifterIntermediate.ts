@@ -13,10 +13,12 @@ import {
   PlannedExercise,
   PlannedSession,
   Schedule,
+  UserBenchmarks,
   UserProgression,
 } from "../../types";
 import { PROGRESSIONS } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
+import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -442,6 +444,38 @@ function buildDay3(
   };
 }
 
+// ── Weight Stamping ─────────────────────────────────────────────────────────
+
+function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
+  const id = exerciseId.toLowerCase();
+  if (id.includes("pull") || id.includes("chin") || id.includes("row")) return "pulling";
+  if (id.includes("dip") || id.includes("push") || id.includes("hspu")) return "pushing";
+  if (id.includes("squat") || id.includes("lunge") || id.includes("pistol")) return "legs";
+  return null;
+}
+
+function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
+  let rampIdx = 0;
+  let lastRampProgId = "";
+  for (const ex of session.exercises) {
+    const pattern = getPattern(ex.progressionId);
+    if (!pattern) continue;
+    if (ex.exerciseRole === "warmup" || ex.exerciseRole === "cooldown" || ex.exerciseRole === "skill") continue;
+
+    // Track ramp-up index per exercise group (resets when progressionId changes)
+    if (ex.exerciseRole === "ramp_up") {
+      if (ex.progressionId !== lastRampProgId) {
+        rampIdx = 0;
+        lastRampProgId = ex.progressionId;
+      }
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx);
+      rampIdx++;
+    } else {
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
+    }
+  }
+}
+
 // ── Main Generator ──────────────────────────────────────────────────────────
 
 const SESSION_BUILDERS = [buildDay1, buildDay2, buildDay3];
@@ -450,9 +484,11 @@ export function generateStreetLifterIntermediate(
   userId: string,
   schedule: Schedule,
   progressions: UserProgression[],
+  benchmarks?: UserBenchmarks,
 ): Mesocycle {
   const mesoId = `meso_sl_int_${Date.now()}`;
-  const sessionsPerWeek = Math.min(schedule.daysPerWeek, 3); // 3-day Push/Pull/Push+Pull
+  const sessionsPerWeek = Math.min(schedule.daysPerWeek, 3);
+  const e1rm = benchmarks ? buildE1RMProfile(benchmarks) : null;
 
   const weeks: PlanWeek[] = [];
   let weekNumber = 1;
@@ -468,7 +504,9 @@ export function generateStreetLifterIntermediate(
 
       for (let s = 0; s < days.length; s++) {
         const builder = SESSION_BUILDERS[s % 3];
-        sessions.push(builder(weekId, days[s], block.phase, weekInPhase, isDeload));
+        const session = builder(weekId, days[s], block.phase, weekInPhase, isDeload);
+        if (e1rm) stampWeights(session, e1rm);
+        sessions.push(session);
       }
 
       weeks.push({

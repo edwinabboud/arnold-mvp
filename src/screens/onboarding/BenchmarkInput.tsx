@@ -427,6 +427,7 @@ export default function BenchmarkInput({ programPath, onComplete, onBack }: Benc
               Tell Arnold your current level for a tailored program.
             </Text>
           </TouchableOpacity>
+
         </View>
       </View>
     );
