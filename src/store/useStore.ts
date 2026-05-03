@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Mesocycle,
   PainReport,
+  PlannedExercise,
   PlannedSession,
   ProgramPath,
   Schedule,
@@ -23,6 +24,13 @@ import {
 import { processSessionForAdaptation } from "../engine/silentAdaptation";
 import { applyAdaptationDecisions } from "../engine/applyAdaptation";
 import { syncProfile, syncMesocycle, syncProgressions, syncStreaks, syncSessionLog } from '../services/supabaseSync';
+import {
+  AdaptationQueue,
+  createEmptyQueue,
+  addToQueue,
+  getWeightAdjustmentWithSources,
+  markAsApplied,
+} from "../engine/adaptationQueue";
 
 // ── Onboarding State ────────────────────────────────────────────────────────
 
@@ -88,6 +96,8 @@ interface ArnoldStore {
   // Streaks
   streaks: StreakData;
   incrementStreak: () => void;
+  /** Resets currentDaily/currentWeekly to 0 if previous Mon-Sun week was fully missed AND user has sessions before that week. Idempotent. */
+  checkAndResetWeeklyStreak: () => void;
   setStreaks: (streaks: StreakData) => void;
 
   // Session history
@@ -97,6 +107,13 @@ interface ArnoldStore {
 
   // Onboarding (hydration only)
   setOnboardingState: (state: OnboardingState) => void;
+
+  // Adaptation queue
+  adaptationQueue: AdaptationQueue;
+  /** Dev-only: log of the last applied adjustments on session start. Empty if none applied yet. */
+  lastAppliedAdjustments: string[];
+  setAdaptationQueue: (queue: AdaptationQueue) => void;
+  clearAdaptationQueue: () => void;
 
   // Full reset
   resetStore: () => void;
@@ -204,10 +221,92 @@ export const useStore = create<ArnoldStore>()(
       // ── Active Session ──────────────────────────────────────────────────
       activeSession: null,
 
-      startSession: (planned, warmUp) =>
+      startSession: (planned, warmUp) => {
+        // Close the autoregulation loop. The user's feedback was about how
+        // the MAIN working set felt. Apply the queued delta to the main
+        // exercise, then scale every other exercise sharing the same
+        // progressionId (ramps, volume, finisher) by the same RATIO so they
+        // stay proportional.
+        const queue = get().adaptationQueue;
+        const appliedIds: string[] = [];
+        const appliedLog: string[] = [];
+
+        // Step 1: figure out the new main weight for each progressionId
+        //         that has a queued delta, by finding its main exercise.
+        const allExercises = [
+          ...planned.exercises,
+          ...planned.warmUpExercises,
+          ...planned.cooldownExercises,
+        ];
+        const ratiosByProgressionId = new Map<
+          string,
+          { ratio: number; mainOldKg: number; mainNewKg: number }
+        >();
+        const seenProgressionIds = new Set<string>();
+        for (const ex of allExercises) {
+          if (seenProgressionIds.has(ex.progressionId)) continue;
+          const { delta, itemIds } = getWeightAdjustmentWithSources(queue, ex.progressionId);
+          if (delta === 0 || itemIds.length === 0) continue;
+          seenProgressionIds.add(ex.progressionId);
+          const mainEx = allExercises.find(
+            e => e.progressionId === ex.progressionId && e.exerciseRole === "main",
+          );
+          if (!mainEx) {
+            console.warn(
+              `[ARNOLD] No 'main' exercise found for progressionId "${ex.progressionId}". Skipping ratio scaling.`,
+            );
+            ratiosByProgressionId.set(ex.progressionId, {
+              ratio: 1, mainOldKg: 0, mainNewKg: 0,
+            });
+            appliedIds.push(...itemIds);
+            continue;
+          }
+          const mainOldKg = mainEx.addedWeightKg ?? 0;
+          const mainNewKg = Math.max(0, mainOldKg + delta);
+          const ratio = mainOldKg > 0 ? mainNewKg / mainOldKg : 1;
+          ratiosByProgressionId.set(ex.progressionId, { ratio, mainOldKg, mainNewKg });
+          appliedIds.push(...itemIds);
+        }
+
+        // Step 2: walk every exercise. For ones whose progressionId is in
+        // the ratio map, scale proportionally.
+        const applyToExercise = (ex: PlannedExercise): PlannedExercise => {
+          const ratioEntry = ratiosByProgressionId.get(ex.progressionId);
+          if (!ratioEntry) return ex;
+
+          const prev = ex.addedWeightKg ?? 0;
+
+          if (ratioEntry.ratio === 1 && ratioEntry.mainOldKg === 0) {
+            return ex; // fallback: no main found or main was 0
+          }
+
+          const scaled = prev * ratioEntry.ratio;
+          const next = Math.max(0, Math.round(scaled / 1.25) * 1.25);
+
+          if (next === prev) return ex;
+
+          appliedLog.push(`${ex.name}: ${prev}kg → ${next}kg`);
+          return { ...ex, addedWeightKg: next === 0 ? undefined : next };
+        };
+
+        const mutatedSession: PlannedSession = {
+          ...planned,
+          exercises: planned.exercises.map(applyToExercise),
+          warmUpExercises: planned.warmUpExercises.map(applyToExercise),
+          cooldownExercises: planned.cooldownExercises.map(applyToExercise),
+        };
+
+        const updatedQueue = markAsApplied(queue, appliedIds);
+
+        if (appliedLog.length > 0) {
+          console.log("[ARNOLD] Applied queued weight adjustments:", appliedLog);
+        } else {
+          console.log("[ARNOLD] No queued adjustments to apply.");
+        }
+
         set({
           activeSession: {
-            plannedSession: planned,
+            plannedSession: mutatedSession,
             currentExerciseIndex: 0,
             currentSetIndex: 0,
             warmUpChoice: warmUp,
@@ -218,7 +317,10 @@ export const useStore = create<ArnoldStore>()(
             isResting: false,
             restSecondsRemaining: 0,
           },
-        }),
+          adaptationQueue: updatedQueue,
+          lastAppliedAdjustments: appliedLog,
+        });
+      },
 
       logSet: (completedSet) =>
         set((s) => {
@@ -259,8 +361,10 @@ export const useStore = create<ArnoldStore>()(
         }),
 
       endSession: () => {
+        console.log("[ARNOLD DEBUG] endSession called");
         const session = get().activeSession;
         if (session) {
+          console.log("[ARNOLD DEBUG] activeSession exists. completedSets:", session.completedSets.length);
           const log: SessionLog = {
             id: `session_${Date.now()}`,
             plannedSessionId: session.plannedSession.id,
@@ -286,6 +390,9 @@ export const useStore = create<ArnoldStore>()(
             if (state.activeMesocycle && state.sessionHistory.length > 0) {
               const latestLog = state.sessionHistory[state.sessionHistory.length - 1];
 
+              console.log("[ARNOLD DEBUG] Processing session for adaptation. Sets:", latestLog.completedSets.length,
+                "perceivedDifficulty sample:", latestLog.completedSets[0]?.perceivedDifficulty);
+
               const adaptationResult = processSessionForAdaptation(
                 latestLog,
                 state.sessionHistory.slice(0, -1),
@@ -293,8 +400,14 @@ export const useStore = create<ArnoldStore>()(
                 state.userProgressions
               );
 
+              console.log("[ARNOLD DEBUG] Adaptation result:", {
+                decisions: adaptationResult.decisions.length,
+                weightAdaptations: adaptationResult.weightAdaptations?.length,
+                flags: adaptationResult.flags.length,
+              });
               console.log("[ARNOLD] Silent adaptation:", adaptationResult.internalLog);
 
+              // Apply progression decisions immediately (advance/regress)
               if (adaptationResult.decisions.length > 0) {
                 const { updatedMesocycle, updatedProgressions, changesApplied } =
                   applyAdaptationDecisions(adaptationResult, state.activeMesocycle, state.userProgressions);
@@ -304,9 +417,17 @@ export const useStore = create<ArnoldStore>()(
                   userProgressions: updatedProgressions,
                 });
 
-                console.log("[ARNOLD] Adaptation applied:", changesApplied);
-              } else {
-                console.log("[ARNOLD] No adaptation decisions this session.");
+                console.log("[ARNOLD] Progression changes applied:", changesApplied);
+              }
+
+              // Queue weight adaptations (surfaced in chat, applied on next session)
+              if (adaptationResult.weightAdaptations && adaptationResult.weightAdaptations.length > 0) {
+                let queue = get().adaptationQueue;
+                for (const item of adaptationResult.weightAdaptations) {
+                  queue = addToQueue(queue, item, latestLog.id);
+                }
+                set({ adaptationQueue: queue });
+                console.log("[ARNOLD] Weight adaptations queued:", adaptationResult.weightAdaptations.map(a => a.change));
               }
 
               if (adaptationResult.flags.length > 0) {
@@ -345,6 +466,56 @@ export const useStore = create<ArnoldStore>()(
         bgSync(() => syncStreaks(get().streaks));
       },
 
+      checkAndResetWeeklyStreak: () => {
+        const state = get();
+        if (state.sessionHistory.length === 0) return;
+        if (state.streaks.currentDaily === 0 && state.streaks.currentWeekly === 0) return;
+
+        const sixtySecAgo = Date.now() - 60 * 1000;
+        const recentSession = state.sessionHistory.some(h => {
+          if (!h.completedAt) return false;
+          return new Date(h.completedAt).getTime() > sixtySecAgo;
+        });
+        if (recentSession) return;
+
+        // Calendar Mon-Sun week boundaries
+        const now = new Date();
+        const dow = now.getDay();
+        const daysBackToMonday = dow === 0 ? 6 : dow - 1;
+        const thisMonStart = new Date(now);
+        thisMonStart.setDate(thisMonStart.getDate() - daysBackToMonday);
+        thisMonStart.setHours(0, 0, 0, 0);
+        const lastMonStart = new Date(thisMonStart);
+        lastMonStart.setDate(lastMonStart.getDate() - 7);
+
+        const thisMon = thisMonStart.getTime();
+        const lastMon = lastMonStart.getTime();
+
+        let hasSessionLastWeek = false;
+        let hasSessionBeforeLastWeek = false;
+        for (const log of state.sessionHistory) {
+          if (!log.completedAt) continue;
+          const t = new Date(log.completedAt).getTime();
+          if (t >= lastMon && t < thisMon) {
+            hasSessionLastWeek = true;
+          } else if (t < lastMon) {
+            hasSessionBeforeLastWeek = true;
+          }
+        }
+
+        if (!hasSessionLastWeek && hasSessionBeforeLastWeek) {
+          set({
+            streaks: {
+              ...state.streaks,
+              currentDaily: 0,
+              currentWeekly: 0,
+            },
+          });
+          console.log("[ARNOLD] Streak reset: previous Mon-Sun week had zero sessions.");
+          bgSync(() => syncStreaks(get().streaks));
+        }
+      },
+
       // ── History ─────────────────────────────────────────────────────────
       sessionHistory: [],
       addSessionLog: (log) =>
@@ -355,6 +526,12 @@ export const useStore = create<ArnoldStore>()(
         onboarding: { ...initialOnboarding, ...s.onboarding, ...(onboarding || {}) },
       })),
 
+      // ── Adaptation Queue ───────────────────────────────────────────────
+      adaptationQueue: createEmptyQueue(),
+      lastAppliedAdjustments: [],
+      setAdaptationQueue: (queue) => set({ adaptationQueue: queue }),
+      clearAdaptationQueue: () => set({ adaptationQueue: createEmptyQueue() }),
+
       resetStore: () => {
         set({
           profile: null,
@@ -364,6 +541,8 @@ export const useStore = create<ArnoldStore>()(
           activeSession: null,
           sessionHistory: [],
           streaks: initialStreaks,
+          adaptationQueue: createEmptyQueue(),
+          lastAppliedAdjustments: [],
         });
       },
     }),
@@ -377,6 +556,8 @@ export const useStore = create<ArnoldStore>()(
         userProgressions: state.userProgressions,
         streaks: state.streaks,
         sessionHistory: state.sessionHistory,
+        adaptationQueue: state.adaptationQueue,
+        lastAppliedAdjustments: state.lastAppliedAdjustments,
       }),
     }
   )

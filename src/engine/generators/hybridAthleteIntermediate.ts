@@ -531,7 +531,7 @@ function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
   return null;
 }
 
-function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
+function stampWeights(session: PlannedSession, e1rm: E1RMProfile, dayType?: "heavy" | "peak_singles"): void {
   let rampIdx = 0;
   let lastRampProgId = "";
   for (const ex of session.exercises) {
@@ -544,10 +544,10 @@ function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
         rampIdx = 0;
         lastRampProgId = ex.progressionId;
       }
-      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx);
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx, dayType);
       rampIdx++;
     } else {
-      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole, undefined, dayType);
     }
   }
 }
@@ -582,35 +582,38 @@ export function generateHybridAthleteIntermediate(
       const sessions: PlannedSession[] = [];
       const days = schedule.preferredDays.slice(0, Math.min(daysPerWeek, structure === "B" ? 5 : 4));
 
-      const stamp = (s: PlannedSession) => { if (e1rm) stampWeights(s, e1rm); return s; };
+      const stamp = (s: PlannedSession, dt?: "heavy" | "peak_singles") => {
+        if (e1rm) stampWeights(s, e1rm, dt);
+        return s;
+      };
 
       if (structure === "A") {
         // Structure A: bolt-on (3-4 days)
         if (days.length >= 1) {
           const s1 = buildHeavyDips(weekId, days[0], block.phase, weekInPhase, isDeload);
           appendPushSkillBoltOn(s1, isDeload, isSpecOrTest);
-          sessions.push(stamp(s1));
+          sessions.push(stamp(s1, "heavy"));
         }
         if (days.length >= 2) {
           const s2 = buildHeavyPullups(weekId, days[1], block.phase, weekInPhase, isDeload);
           appendPullSkillBoltOn(s2, coreId, isDeload, isSpecOrTest);
-          sessions.push(stamp(s2));
+          sessions.push(stamp(s2, "heavy"));
         }
         if (days.length >= 3) {
           const s3 = buildPeakSingles(weekId, days[2], block.phase, weekInPhase, isDeload);
           appendLsitBoltOn(s3, coreId, isDeload);
-          sessions.push(stamp(s3));
+          sessions.push(stamp(s3, "peak_singles"));
         }
         if (days.length >= 4) {
           sessions.push(stamp(buildSkillDay(weekId, days[3], block.phase, isDeload, coreId, skillId)));
         }
       } else {
         // Structure B: PPL + Skill + Upper Volume (5 days)
-        if (days.length >= 1) sessions.push(stamp(buildHeavyDips(weekId, days[0], block.phase, weekInPhase, isDeload)));
-        if (days.length >= 2) sessions.push(stamp(buildLegsDay(weekId, days[1], block.phase, weekInPhase, isDeload, legsId, coreId)));
-        if (days.length >= 3) sessions.push(stamp(buildHeavyPullups(weekId, days[2], block.phase, weekInPhase, isDeload)));
+        if (days.length >= 1) sessions.push(stamp(buildHeavyDips(weekId, days[0], block.phase, weekInPhase, isDeload), "heavy"));
+        if (days.length >= 2) sessions.push(stamp(buildLegsDay(weekId, days[1], block.phase, weekInPhase, isDeload, legsId, coreId), "heavy"));
+        if (days.length >= 3) sessions.push(stamp(buildHeavyPullups(weekId, days[2], block.phase, weekInPhase, isDeload), "heavy"));
         if (days.length >= 4) sessions.push(stamp(buildSkillDay(weekId, days[3], block.phase, isDeload, coreId, skillId)));
-        if (days.length >= 5) sessions.push(stamp(buildUpperVolume(weekId, days[4], block.phase, isDeload, coreId, skillId)));
+        if (days.length >= 5) sessions.push(stamp(buildUpperVolume(weekId, days[4], block.phase, isDeload, coreId, skillId), "heavy"));
       }
 
       weeks.push({ id: weekId, mesocycleId: mesoId, weekNumber, phase: block.phase, sessions });

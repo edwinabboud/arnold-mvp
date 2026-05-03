@@ -1,0 +1,51 @@
+{
+  "description": "Universal training principles that apply across all program paths.",
+  "principles": [
+    {
+      "name": "Progressive Overload",
+      "definition": "Gradually increase training stress over time (load, reps, hold time, or difficulty).",
+      "application": "Arnold tracks overload through weight progression (weighted paths) and progression tree advancement (skill paths)."
+    },
+    {
+      "name": "SRA Curve",
+      "definition": "After training stimulus, performance temporarily decreases (recovery), then increases above baseline (supercompensation). Training must happen at the right point in the SRA curve.",
+      "application": "This is why rest periods, deload weeks, and 48-72h gaps between similar sessions exist."
+    },
+    {
+      "name": "Specificity",
+      "definition": "Training adaptations are specific to the demands imposed. Heavy singles build max strength. High reps build endurance. Skill holds build neural patterns.",
+      "application": "This is why phases are structured: accumulation (volume) → strength (intensity) → peaking (specificity)."
+    },
+    {
+      "name": "Variation Within Structure",
+      "definition": "Variation in exercises prevents accommodation, but the core movement pattern stays constant.",
+      "application": "Back-off variation changes weekly: tempo, paused, deadstop. Same pattern, different stimulus."
+    },
+    {
+      "name": "Fatigue Management",
+      "definition": "Training accumulates fatigue. Deload weeks allow fatigue to dissipate while fitness is maintained.",
+      "application": "Deload weeks are non-negotiable. The max(-2) finisher tracks fatigue: if reps trend down, fatigue is accumulating."
+    },
+    {
+      "name": "Motor Learning",
+      "definition": "Neural adaptations require high-quality, low-fatigue practice. Training to failure creates maladaptive motor patterns (Branscheidt et al. 2019).",
+      "application": "Skill work is NEVER to failure. Working sets at 60-70% of max hold."
+    },
+    {
+      "name": "Connective Tissue Adaptation",
+      "definition": "Tendons and ligaments adapt roughly 50% slower than muscles. Rushing progression causes injuries.",
+      "application": "Beginners don't add weight until 10 pull-ups / 12 dips. First weight additions are small (+2.5kg pull-ups, +5kg dips)."
+    }
+  ],
+  "restPeriods": {
+    "peakSingles": "300s (5 min)",
+    "topSets": "240-300s (4-5 min)",
+    "backOffSets": "120-180s (2-3 min)",
+    "volumeSets": "90-120s",
+    "accessories": "45-90s",
+    "rampUpSets": "60-150s (increases with weight)",
+    "balanceSkills": "60-180s (1-3 min)",
+    "strengthSkills": "180-300s (3-5 min)",
+    "dynamicSkills": "120-180s (2-3 min)"
+  }
+}

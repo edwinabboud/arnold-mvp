@@ -18,6 +18,15 @@ import {
 } from '../engine/rules';
 import { ChatMessage, ChatOption } from '../types/logging';
 import { CoachingContext, PainReport, PlannedExercise } from '../types';
+import { markAsSurfaced, getUnsurfacedItems, addToQueue } from '../engine/adaptationQueue';
+import {
+  ReviewState,
+  createReviewState,
+  isReviewMessage,
+  parseOverallFeel,
+  handleOverallFeel,
+  handleExerciseSelection,
+} from '../engine/sessionReview';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +40,7 @@ export interface UseChatServiceReturn {
   tapOption: (option: ChatOption, messageId: string) => Promise<void>;
   reportPain: (bodyPart: string, severity: number) => Promise<void>;
   addSystemMessage: (text: string) => void;
+  addArnoldReply: (text: string, source: 'quick' | 'rules' | 'llm', options?: ChatOption[]) => void;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -124,8 +134,29 @@ export function useChatService(): UseChatServiceReturn {
   const painFlowRef = useRef<PainFlowState>('idle');
   const painBodyPartRef = useRef<string>('');
 
+  // Session review state machine
+  const reviewStateRef = useRef<ReviewState>(createReviewState());
+
   // Track whether user engaged chat this session (for post-session cost optimization)
   const chatEngagedRef = useRef(false);
+
+  // ── Arnold call helper (passes adaptation queue + marks surfaced) ──
+  const callArnold = useCallback(async (
+    action: UserAction,
+    ctx: CoachingContext,
+    rulesResult?: any,
+  ) => {
+    const store = useStore.getState();
+    const response = await routeInteraction(action, ctx, rulesResult, store.adaptationQueue);
+
+    const unsurfaced = getUnsurfacedItems(store.adaptationQueue);
+    if (unsurfaced.length > 0) {
+      const updated = markAsSurfaced(store.adaptationQueue, unsurfaced.map(i => i.id));
+      store.setAdaptationQueue(updated);
+    }
+
+    return response;
+  }, []);
 
   // ── Add message helpers ──
 
@@ -184,7 +215,7 @@ export function useChatService(): UseChatServiceReturn {
     // Route through conversation agent for Arnold's voice
     setIsLoading(true);
     try {
-      const response = await routeInteraction(
+      const response = await callArnold(
         { type: 'pain_report', bodyArea: bodyPart, severity },
         ctx,
         decision
@@ -229,6 +260,59 @@ export function useChatService(): UseChatServiceReturn {
       return;
     }
 
+    // ── Session review flow (deterministic, no LLM) ──
+    if (reviewStateRef.current.step === 'awaiting_exercise' && trimmed.startsWith('__review_exercise__')) {
+      const result = handleExerciseSelection(reviewStateRef.current, trimmed);
+      reviewStateRef.current = result.newState;
+      addArnoldReply(result.arnoldText, 'rules');
+
+      if (result.adaptations && result.adaptations.length > 0) {
+        const store = useStore.getState();
+        let queue = store.adaptationQueue;
+        for (const item of result.adaptations) {
+          queue = addToQueue(queue, item, reviewStateRef.current.sessionId);
+        }
+        store.setAdaptationQueue(queue);
+        console.log("[ARNOLD] Review adaptations queued:", result.adaptations.map(a => a.change));
+      }
+      return;
+    }
+
+    if (isReviewMessage(trimmed)) {
+      const feel = parseOverallFeel(trimmed);
+      if (feel) {
+        const store = useStore.getState();
+        const session = store.activeSession?.plannedSession;
+        // Also check session history for just-completed session
+        const lastLog = store.sessionHistory[store.sessionHistory.length - 1];
+        const plannedSession = session
+          || (lastLog && store.activeMesocycle?.weeks
+            .flatMap(w => w.sessions)
+            .find(s => s.id === lastLog.plannedSessionId));
+
+        if (plannedSession) {
+          const result = handleOverallFeel(feel, plannedSession);
+          reviewStateRef.current = result.newState;
+
+          if (result.options) {
+            addArnoldReply(result.arnoldText, 'rules', result.options as ChatOption[]);
+          } else {
+            addArnoldReply(result.arnoldText, 'rules');
+          }
+
+          if (result.adaptations && result.adaptations.length > 0) {
+            let queue = store.adaptationQueue;
+            for (const item of result.adaptations) {
+              queue = addToQueue(queue, item, plannedSession.id);
+            }
+            store.setAdaptationQueue(queue);
+            console.log("[ARNOLD] Review adaptations queued:", result.adaptations.map(a => a.change));
+          }
+          return;
+        }
+      }
+    }
+
     // ── Quick bypass: "how many left" (no API call) ──
     if (/how many|sets? left|left on/i.test(lower)) {
       const info = getCurrentExerciseInfo();
@@ -262,7 +346,7 @@ export function useChatService(): UseChatServiceReturn {
       if (/too easy|too light|boring|not challenging/i.test(lower)) {
         if (info?.current) {
           const decision = handleTooEasy(info.current, ctx.currentPhase);
-          const response = await routeInteraction(
+          const response = await callArnold(
             { type: 'chat_message', text: trimmed },
             ctx,
             decision
@@ -279,8 +363,12 @@ export function useChatService(): UseChatServiceReturn {
           const progression = store.userProgressions.find(
             p => p.progressionId === info.current!.progressionId
           );
+          if (!progression) {
+            addArnoldReply("Can't find your progression for this exercise — try again from the home screen.", 'quick');
+            return;
+          }
           const decision = handleCouldntFinish(info.current, ctx.recentSessions, progression);
-          const response = await routeInteraction(
+          const response = await callArnold(
             { type: 'chat_message', text: trimmed },
             ctx,
             decision
@@ -291,7 +379,7 @@ export function useChatService(): UseChatServiceReturn {
       }
 
       // General message → conversation agent
-      const response = await routeInteraction(
+      const response = await callArnold(
         { type: 'chat_message', text: trimmed },
         ctx
       );
@@ -320,7 +408,7 @@ export function useChatService(): UseChatServiceReturn {
       setIsLoading(true);
       try {
         const ctx = buildCoachingContext();
-        const response = await routeInteraction(
+        const response = await callArnold(
           { type: 'plan_change_response', accepted: option.value === 'approve_change' },
           ctx
         );
@@ -345,5 +433,6 @@ export function useChatService(): UseChatServiceReturn {
     tapOption,
     reportPain,
     addSystemMessage,
+    addArnoldReply,
   };
 }

@@ -89,17 +89,17 @@ interface PhaseIntensity {
 }
 
 const PHASE_INTENSITY: Record<string, PhaseIntensity> = {
-  accumulation:     { workingPct: 0.74, backOffPct: 0.62, finisherPct: 0.50 },
-  strength:         { workingPct: 0.83, backOffPct: 0.72, finisherPct: 0.55 },
-  peaking:          { workingPct: 0.92, backOffPct: 0.80, finisherPct: 0.57 },
-  test:             { workingPct: 0.95, backOffPct: 0.70, finisherPct: 0.0 },
-  deload:           { workingPct: 0.57, backOffPct: 0.50, finisherPct: 0.0 },
+  accumulation:     { workingPct: 0.81, backOffPct: 0.68, finisherPct: 0.50 },
+  strength:         { workingPct: 0.88, backOffPct: 0.75, finisherPct: 0.55 },
+  peaking:          { workingPct: 0.95, backOffPct: 0.82, finisherPct: 0.57 },
+  test:             { workingPct: 0.98, backOffPct: 0.70, finisherPct: 0.0 },
+  deload:           { workingPct: 0.60, backOffPct: 0.50, finisherPct: 0.0 },
   // Beginner phases (bodyweight only — no added weight)
   base_building:    { workingPct: 0, backOffPct: 0, finisherPct: 0 },
   base_conditioning:{ workingPct: 0, backOffPct: 0, finisherPct: 0 },
-  hypertrophy:      { workingPct: 0.70, backOffPct: 0.58, finisherPct: 0 },
+  hypertrophy:      { workingPct: 0.75, backOffPct: 0.62, finisherPct: 0 },
   skill_peaking:    { workingPct: 0, backOffPct: 0, finisherPct: 0 },
-  specialization:   { workingPct: 0.90, backOffPct: 0.78, finisherPct: 0.55 },
+  specialization:   { workingPct: 0.93, backOffPct: 0.80, finisherPct: 0.55 },
 };
 
 // ── Plate Rounding ──────────────────────────────────────────────────────────
@@ -126,6 +126,7 @@ export function getTargetWeight(
   phase: string,
   role: string,
   rampUpSetIndex?: number,
+  dayType?: "heavy" | "peak_singles",
 ): number {
   const e1rm = pattern === "pulling" ? e1rmProfile.pullUp
     : pattern === "pushing" ? e1rmProfile.dip
@@ -135,27 +136,33 @@ export function getTargetWeight(
 
   const intensity = PHASE_INTENSITY[phase] ?? PHASE_INTENSITY.accumulation;
 
-  // Ramp-up sets: percentage of WORKING weight, not e1RM
+  // Day-type override: peak singles day always uses peaking intensity
+  // regardless of mesocycle phase (weekly max expression per Bible Section 4, Day 3)
+  const effectiveIntensity = dayType === "peak_singles"
+    ? PHASE_INTENSITY.peaking
+    : intensity;
+
+  // Ramp-up sets: percentages applied to ADDED working weight, not total load
   if (role === "ramp_up" && rampUpSetIndex !== undefined) {
-    const workingTotalLoad = e1rm.totalE1RM * intensity.workingPct;
-    const rampPcts = [0.20, 0.40, 0.60, 0.75]; // per Bible Section 7
+    const workingTotalLoad = e1rm.totalE1RM * effectiveIntensity.workingPct;
+    const workingAdded = Math.max(0, workingTotalLoad - e1rm.bwContribution);
+    const rampPcts = [0.25, 0.50, 0.75, 0.85];
     const pct = rampPcts[Math.min(rampUpSetIndex, rampPcts.length - 1)];
-    const rampTotalLoad = workingTotalLoad * pct;
-    const addedWeight = Math.max(0, rampTotalLoad - e1rm.bwContribution);
-    return roundToPlate(addedWeight);
+    const rampAdded = workingAdded * pct;
+    return roundToPlate(rampAdded);
   }
 
   let pct: number;
   switch (role) {
     case "main":
-      pct = intensity.workingPct;
+      pct = effectiveIntensity.workingPct;
       break;
     case "volume":
     case "complementary":
-      pct = intensity.backOffPct;
+      pct = effectiveIntensity.backOffPct;
       break;
     case "finisher":
-      pct = intensity.finisherPct;
+      pct = effectiveIntensity.finisherPct;
       break;
     case "accessory":
     case "warmup":
@@ -163,7 +170,7 @@ export function getTargetWeight(
     case "skill":
       return 0;
     default:
-      pct = intensity.workingPct;
+      pct = effectiveIntensity.workingPct;
   }
 
   if (pct <= 0) return 0;
@@ -202,6 +209,7 @@ export function getSessionWeights(
   exercises: Array<{ id: string; role: string; pattern?: string; rampUpSetIndex?: number }>,
   e1rmProfile: E1RMProfile,
   phase: string,
+  dayType?: "heavy" | "peak_singles",
 ): ExerciseWeightTarget[] {
   return exercises.map(ex => ({
     exerciseId: ex.id,
@@ -212,6 +220,7 @@ export function getSessionWeights(
       phase,
       ex.role,
       ex.rampUpSetIndex,
+      dayType,
     ),
     rampUpSetIndex: ex.rampUpSetIndex,
   }));

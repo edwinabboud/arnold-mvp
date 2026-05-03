@@ -1,0 +1,73 @@
+
+{
+  "path": "hybrid_athlete",
+  "description": "Weighted strength + skill acquisition. Heavy work gets CNS priority, skills separate.",
+  "coreRule": "Heavy weighted work ALWAYS gets CNS priority. Skills bolted on END of weighted sessions or given their own day.",
+  "structureSelection": {
+    "3-4_days": { "structure": "A", "name": "Bolt-On", "description": "Street Lifter sessions intact. 2-3 skill exercises at END." },
+    "4-5_days": { "structure": "B", "name": "PPL + Skill Day", "description": "Pure push/pull/leg days + dedicated skill day(s)." },
+    "5-6_days": { "structure": "C", "name": "Priority Rotation", "description": "Primary goals 3x/week, Secondary 2x/week, Tertiary 1x/week." },
+    "5_days_competition": { "structure": "D", "name": "KOW Hybrid", "description": "Street Lifter Advanced is the entire program. Skills as assistance only." }
+  },
+  "intermediate": {
+    "duration": "12-week mesocycle",
+    "phases": [
+      { "name": "base_building", "weeks": [1,2,3,4], "weighted": "3-4x6-8 @RPE 7-8", "skills": "10-15 min/session", "volume": "high", "guidance": "Building the base for both domains. Moderate weighted intensity." },
+      { "name": "deload", "weeks": [5], "weighted": "2x6 @RPE 5", "skills": "10 min easy", "volume": "low" },
+      { "name": "intensification", "weeks": [6,7,8,9], "weighted": "4-5x3-5 @RPE 8-9", "skills": "15-20 min/session", "volume": "moderate", "guidance": "Pushing intensity. Heavier loads, harder skill progressions." },
+      { "name": "deload", "weeks": [10], "weighted": "2x5 @RPE 5", "skills": "10 min easy", "volume": "low" },
+      { "name": "specialization", "weeks": [11], "guidance": "Arnold asks: weighted PRs or skill PRs? Chosen domain gets full focus, other drops to maintenance." },
+      { "name": "test", "weeks": [12], "guidance": "PR attempts on BOTH weighted lifts AND skill holds." }
+    ]
+  },
+  "synergyBenchmarks": [
+    { "benchmark": "+30% BW pull-up x5", "predicts": "Tuck front lever (10-15s)" },
+    { "benchmark": "+50% BW pull-up x5", "predicts": "Advanced tuck front lever" },
+    { "benchmark": "+65-80% BW pull-up x1", "predicts": "Full front lever (with practice)" },
+    { "benchmark": "+30% BW dip x5", "predicts": "Tuck planche support (5-10s)" },
+    { "benchmark": "+50% BW dip x5", "predicts": "Advanced tuck planche" },
+    { "benchmark": "15+ strict pull-ups", "predicts": "Muscle-up readiness" },
+    { "benchmark": "5+ chest-to-bar pull-ups", "predicts": "First muscle-up achievable" }
+  ],
+  "synergyAdaptationRules": [
+    {
+      "scenario": "Front lever stalled, weighted pull-ups progressing",
+      "response": "Increase front lever frequency +1/week. Add FL rows as accessory. Strength is there — skill needs more practice."
+    },
+    {
+      "scenario": "Front lever stalled, pull-ups ALSO stalled",
+      "response": "Focus weighted pull-ups 2-3 weeks, drop FL to maintenance. Raw strength is the bottleneck."
+    },
+    {
+      "scenario": "Planche stalled, dips progressing",
+      "response": "Increase planche frequency. Add pseudo planche push-ups. Pressing strength is there — straight-arm skill needs work."
+    },
+    {
+      "scenario": "Planche stalled, dips ALSO stalled",
+      "response": "Focus weighted dips 2-3 weeks, drop planche to maintenance. Rebuild pressing base."
+    },
+    {
+      "scenario": "Weighted lifts regressing after adding skills",
+      "response": "Skill volume stealing recovery. Reduce skill sessions by 1/week or cut bolt-on from 3 to 1 exercise."
+    },
+    {
+      "scenario": "Both stalled simultaneously",
+      "response": "Trigger deload. After deload, focus weighted 2-3 weeks, then reintroduce skills gradually."
+    }
+  ],
+  "incompatiblePairings": [
+    ["planche_max", "hspu_max"],
+    ["front_lever_max", "heavy_pullups_same_session"],
+    ["planche", "front_lever_same_day"]
+  ],
+  "compatiblePairings": [
+    ["handstand", "l_sit"],
+    ["front_lever", "planche_lean_light"],
+    ["muscle_up_drills", "back_lever"]
+  ],
+  "boltOnSkillBlock": {
+    "afterPushDay": ["Wall walks 3x3", "Pike push-ups 3x8", "Planche lean 3x15-20s"],
+    "afterPullDay": ["Tuck front lever 3x6-10s", "Front lever with band 3x10s", "Skin the cat 3x5"],
+    "rules": "Select 2-3 exercises. Total time 10-15 min. Never to failure."
+  }
+}

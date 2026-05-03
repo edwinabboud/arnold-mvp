@@ -1,0 +1,129 @@
+{
+  "path": "skill_builder",
+  "description": "Calisthenics skill acquisition — handstands, levers, planches. Form-driven, never to failure.",
+  "coreRules": [
+    "Skills ALWAYS first in session, after warm-up, when CNS is fresh",
+    "NEVER train skills to failure — stop while form is excellent",
+    "Maximum 2 skills per session",
+    "Frequency > Volume — 5×15min beats 1×75min for neural adaptation",
+    "Rest fully between attempts — 1-3min balance, 3-5min strength-skills"
+  ],
+  "prilepinTable": [
+    { "maxHold": "5-10s", "workingSets": 6, "workingHold": "3-5s" },
+    { "maxHold": "10-20s", "workingSets": 5, "workingHold": "6-12s" },
+    { "maxHold": "20-30s", "workingSets": 4, "workingHold": "12-20s" },
+    { "maxHold": "30s+", "workingSets": "3-4", "workingHold": "18-25s" }
+  ],
+  "skillProgressions": {
+    "handstand": {
+      "frequency": "4-6 days/week", "type": "balance",
+      "timeline": { "first5s": "2-4mo", "30s": "4-8mo", "60s": "6-12mo" },
+      "levels": [
+        { "level": 1, "name": "Plank + hollow body hold", "threshold": "60s plank + 30s hollow" },
+        { "level": 2, "name": "Wall walks (chest-to-wall)", "threshold": "3x3 controlled" },
+        { "level": 3, "name": "Chest-to-wall handstand", "threshold": "3x60s" },
+        { "level": 4, "name": "Wall shoulder taps", "threshold": "3x8 per side" },
+        { "level": 5, "name": "Back-to-wall handstand", "threshold": "3x45s" },
+        { "level": 6, "name": "Toe pulls from wall", "threshold": "3x5 controlled" },
+        { "level": 7, "name": "Freestanding attempts", "threshold": "10s consistent" },
+        { "level": 8, "name": "Freestanding handstand", "threshold": "30s" },
+        { "level": 9, "name": "60s freestanding hold", "threshold": "60s" }
+      ]
+    },
+    "planche": {
+      "frequency": "2-3x/week", "type": "strength-skill",
+      "timeline": { "tuck": "3-6mo", "straddle": "1-3yr", "full": "2-5yr+" },
+      "notes": "Advanced tuck to straddle is the largest difficulty gap in all calisthenics.",
+      "levels": [
+        { "level": 1, "name": "Planche lean", "threshold": "3x30s moderate lean" },
+        { "level": 2, "name": "Frog stand / Crow pose", "threshold": "3x30s" },
+        { "level": 3, "name": "Tuck planche", "threshold": "3x15s" },
+        { "level": 4, "name": "Advanced tuck planche", "threshold": "3x10s" },
+        { "level": 5, "name": "One-leg tuck planche", "threshold": "3x8s per side" },
+        { "level": 6, "name": "Straddle planche", "threshold": "3x5s" },
+        { "level": 7, "name": "Half-lay planche", "threshold": "3x5s" },
+        { "level": 8, "name": "Full planche", "threshold": "3x3s" }
+      ]
+    },
+    "frontLever": {
+      "frequency": "2-3x/week", "type": "strength-skill",
+      "timeline": { "tuck": "1-4wk", "full": "6-24mo" },
+      "strengthPredictor": "Weighted pull-up +50-80% BW predicts full front lever",
+      "levels": [
+        { "level": 1, "name": "Active dead hang", "threshold": "3x30s" },
+        { "level": 2, "name": "Tuck front lever", "threshold": "4x15s" },
+        { "level": 3, "name": "Advanced tuck front lever", "threshold": "3x10s" },
+        { "level": 4, "name": "One-leg front lever", "threshold": "3x8s per side" },
+        { "level": 5, "name": "Straddle front lever", "threshold": "3x8s" },
+        { "level": 6, "name": "Half-lay front lever", "threshold": "3x5s" },
+        { "level": 7, "name": "Full front lever", "threshold": "3x5s" }
+      ]
+    },
+    "backLever": {
+      "frequency": "2-3x/week", "type": "strength-skill",
+      "safety": "ALWAYS pronated grip. Supinated = biceps tendon injury risk.",
+      "levels": [
+        { "level": 1, "name": "German hang", "threshold": "3x30s" },
+        { "level": 2, "name": "Skin the cat", "threshold": "3x10 reps" },
+        { "level": 3, "name": "Tuck back lever", "threshold": "3x15s" },
+        { "level": 4, "name": "Advanced tuck back lever", "threshold": "3x10s" },
+        { "level": 5, "name": "One-leg back lever", "threshold": "3x8s per side" },
+        { "level": 6, "name": "Straddle back lever", "threshold": "3x8s" },
+        { "level": 7, "name": "Full back lever", "threshold": "3x5s" }
+      ]
+    },
+    "muscleUp": {
+      "frequency": "2-3x/week", "type": "dynamic",
+      "levels": [
+        { "level": 1, "name": "Strict pull-ups", "threshold": "3x10-15" },
+        { "level": 2, "name": "Chest-to-bar pull-ups", "threshold": "3x5-8" },
+        { "level": 3, "name": "High pull-ups (sternum)", "threshold": "3x5" },
+        { "level": 4, "name": "Straight bar dips", "threshold": "3x10" },
+        { "level": 5, "name": "Negative muscle-ups", "threshold": "3x3-5" },
+        { "level": 6, "name": "Band-assisted muscle-ups", "threshold": "3x3-5" },
+        { "level": 7, "name": "Strict bar muscle-up", "threshold": "3x5" },
+        { "level": 8, "name": "Weighted muscle-up", "threshold": "3x3" }
+      ]
+    },
+    "lSit": {
+      "frequency": "3-5x/week", "type": "compression",
+      "levels": [
+        { "level": 1, "name": "Support hold", "threshold": "3x30s" },
+        { "level": 2, "name": "Foot-supported L-sit", "threshold": "3x20s" },
+        { "level": 3, "name": "Tuck L-sit", "threshold": "60s accumulated" },
+        { "level": 4, "name": "Single-leg L-sit", "threshold": "3x10s per side" },
+        { "level": 5, "name": "Full L-sit", "threshold": "3x15s" },
+        { "level": 6, "name": "Straddle V-sit", "threshold": "3x10s" },
+        { "level": 7, "name": "V-sit", "threshold": "3x5s" },
+        { "level": 8, "name": "Manna", "threshold": "3x3s" }
+      ]
+    },
+    "humanFlag": {
+      "frequency": "2-3x/week", "type": "strength-skill",
+      "levels": [
+        { "level": 1, "name": "Side plank (each side)", "threshold": "3x60s per side" },
+        { "level": 2, "name": "Vertical flag", "threshold": "3x10-20s" },
+        { "level": 3, "name": "Flag negatives", "threshold": "3x3-5" },
+        { "level": 4, "name": "Tuck flag", "threshold": "3x10s" },
+        { "level": 5, "name": "One-leg flag", "threshold": "3x8s" },
+        { "level": 6, "name": "Straddle flag", "threshold": "3x5s" },
+        { "level": 7, "name": "Full human flag", "threshold": "3x3-5s" }
+      ]
+    }
+  },
+  "intermediate": {
+    "duration": "12-week mesocycle",
+    "frequency": "4-5 days/week",
+    "periodization": "Block: Hypertrophy → Strength → Skill Peak → Test",
+    "phases": [
+      { "name": "hypertrophy", "weeks": [1,2,3], "skillTime": "15 min", "strength": "3-4x8-12", "volume": "high", "guidance": "Building muscle that supports skills. Controlled tempo." },
+      { "name": "deload", "weeks": [4], "skillTime": "10 min easy", "strength": "2x8 @RPE 5", "volume": "low" },
+      { "name": "strength", "weeks": [5,6,7,8], "skillTime": "20 min", "strength": "4-5x3-5", "volume": "moderate", "guidance": "Converting muscle to force. Harder progressions." },
+      { "name": "deload", "weeks": [9], "skillTime": "10 min easy", "strength": "2x5 @RPE 5", "volume": "low" },
+      { "name": "skill_peaking", "weeks": [10,11], "skillTime": "25 min, max attempts", "strength": "Drop supplementary", "guidance": "Skill breakthroughs. Max attempts while form is excellent." },
+      { "name": "test", "weeks": [12], "skillTime": "PR attempts", "strength": "Light maintenance", "volume": "minimal" }
+    ],
+    "incompatiblePairs": [["planche", "hspu"], ["front_lever", "heavy_pulls"]],
+    "compatiblePairs": [["handstand", "l_sit"], ["front_lever", "planche_lean"], ["muscle_up", "back_lever"]]
+  }
+}

@@ -28,6 +28,7 @@ import {
   UserProgression,
 } from "../types";
 import { getNextProgression, getPreviousProgression } from "../data/progressions";
+import type { AdaptationItem } from "./adaptationQueue";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,8 @@ export interface SilentAdaptationResult {
   flags: AdaptationFlag[];
   /** Summary for logging (never shown to user) */
   internalLog: string;
+  /** Weight adjustments from autoregulation table */
+  weightAdaptations: AdaptationItem[];
 }
 
 export interface SilentDecision {
@@ -150,10 +153,15 @@ export function runSilentAdaptation(
     logs.push("Signal 5: No chat engagement. Silent adaptation active.");
   }
 
+  // ── Weight Autoregulation ────────────────────────────────────────────
+  const weightResults = checkWeightAutoregulation(latestSession, plannedSessions);
+  logs.push(...weightResults.logs);
+
   return {
     decisions: decisions.filter(d => d.confidence >= 0.7),
     flags,
     internalLog: logs.join("\n"),
+    weightAdaptations: weightResults.adaptations,
   };
 }
 
@@ -434,6 +442,160 @@ function checkRepsBelowTarget(
   }
 
   return { decisions, flags, logs };
+}
+
+// ── Weight Autoregulation ───────────────────────────────────────────────────
+// Applies the autoregulation table to weighted exercises after every session.
+// Maps perceivedDifficulty to RPE approximation, checks rep completion,
+// outputs weight adjustment items for the adaptation queue.
+
+function checkWeightAutoregulation(
+  latestSession: SessionLog,
+  plannedSessions: PlannedSession[],
+): { adaptations: AdaptationItem[]; logs: string[] } {
+  const adaptations: AdaptationItem[] = [];
+  const logs: string[] = [];
+
+  const planned = plannedSessions.find(p => p.id === latestSession.plannedSessionId);
+  if (!planned) return { adaptations, logs };
+
+  const allWeighted = planned.exercises.filter(ex =>
+    ex.addedWeightKg !== undefined
+    && ex.addedWeightKg > 0
+    && (ex.exerciseRole === "main" || ex.exerciseRole === "volume")
+  );
+
+  // Deduplicate by progressionId — keep highest priority role (main > volume)
+  const ROLE_PRIORITY: Record<string, number> = { main: 2, volume: 1 };
+  const byProgId = new Map<string, PlannedExercise>();
+  for (const ex of allWeighted) {
+    const existing = byProgId.get(ex.progressionId);
+    if (!existing || (ROLE_PRIORITY[ex.exerciseRole] ?? 0) > (ROLE_PRIORITY[existing.exerciseRole] ?? 0)) {
+      byProgId.set(ex.progressionId, ex);
+    }
+  }
+  const weightedExercises = Array.from(byProgId.values());
+
+  for (const exercise of weightedExercises) {
+    // Match completed sets from ALL exercises sharing this progressionId
+    const completedSets = latestSession.completedSets.filter(
+      s => s.exerciseId === exercise.id || s.exerciseId === exercise.progressionId
+    );
+
+    if (completedSets.length === 0) {
+      logs.push(`Autoregulation: ${exercise.name} — no completed sets, skipping.`);
+      continue;
+    }
+
+    const totalRepsPlanned = exercise.sets * exercise.reps;
+    const totalRepsCompleted = completedSets.reduce((sum, s) => sum + s.repsCompleted, 0);
+    const repsShort = totalRepsPlanned - totalRepsCompleted;
+
+    const lastSet = completedSets[completedSets.length - 1];
+    const lastSetMissed = lastSet ? (exercise.reps - lastSet.repsCompleted) : 0;
+
+    const difficulties = completedSets
+      .map(s => s.perceivedDifficulty)
+      .filter(Boolean) as DifficultyIntent[];
+    const dominant = getDominantDifficulty(difficulties);
+
+    const result = applyAutoregulationTable(repsShort, lastSetMissed, dominant, exercise);
+
+    if (result) {
+      adaptations.push(result);
+      logs.push(`Autoregulation: ${exercise.name} — ${result.change} (${result.reason})`);
+    } else {
+      logs.push(`Autoregulation: ${exercise.name} — no change needed.`);
+    }
+  }
+
+  return { adaptations, logs };
+}
+
+function getDominantDifficulty(
+  difficulties: DifficultyIntent[]
+): DifficultyIntent | null {
+  if (difficulties.length === 0) return null;
+  const counts: Record<string, number> = {};
+  for (const d of difficulties) {
+    counts[d] = (counts[d] || 0) + 1;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] as DifficultyIntent;
+}
+
+function applyAutoregulationTable(
+  totalRepsShort: number,
+  lastSetMissed: number,
+  difficulty: DifficultyIntent | null,
+  exercise: PlannedExercise,
+): AdaptationItem | null {
+  const now = new Date().toISOString();
+  const base = {
+    exerciseKey: exercise.progressionId,
+    exerciseName: exercise.name,
+    createdAt: now,
+    surfaced: false,
+    userResponse: null as null,
+    applied: false,
+  };
+
+  // Rule 5: Missed 2+ reps total
+  if (totalRepsShort >= 2) {
+    return {
+      ...base,
+      id: `adapt_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+      type: "weight_decrease",
+      change: "-2.5kg next session",
+      reason: `Missed ${totalRepsShort} reps on ${exercise.name}. Dropping weight to rebuild.`,
+      weightDeltaKg: -2.5,
+    };
+  }
+
+  // Rule 4: Missed 1 rep on last set only
+  if (lastSetMissed === 1 && totalRepsShort === 1) {
+    return {
+      ...base,
+      id: `adapt_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+      type: "weight_hold",
+      change: "Same weight — retry",
+      reason: `Missed 1 rep on last set of ${exercise.name}. Weight stays, retry next session.`,
+      weightDeltaKg: 0,
+    };
+  }
+
+  // All reps completed — check difficulty
+  if (totalRepsShort <= 0 && difficulty) {
+    // Rule 1: Easy = RPE below target → +2.5kg
+    if (difficulty === "easy") {
+      return {
+        ...base,
+        id: `adapt_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+        type: "weight_increase",
+        change: "+2.5kg next session",
+        reason: `All reps clean and felt easy on ${exercise.name}. Bumping weight.`,
+        weightDeltaKg: 2.5,
+      };
+    }
+
+    // Rule 2: Moderate = at target RPE → +1.25kg
+    if (difficulty === "moderate") {
+      return {
+        ...base,
+        id: `adapt_${Date.now()}_${Math.random().toString(36).slice(2, 4)}`,
+        type: "weight_increase",
+        change: "+1.25kg next session",
+        reason: `All reps clean at target effort on ${exercise.name}. Micro-loading.`,
+        weightDeltaKg: 1.25,
+      };
+    }
+
+    // Rule 3: Challenging = RPE above target → no change
+    if (difficulty === "challenging") {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

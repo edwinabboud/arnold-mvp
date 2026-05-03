@@ -13,9 +13,9 @@ import {
   ScrollView,
   StyleSheet,
   Modal,
-  SafeAreaView,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
 import {
@@ -425,8 +425,9 @@ export default function SessionScreen({ navigation, route }: any) {
   const [detailExercise, setDetailExercise] = useState<string | null>(null);
   const [sessionPhase, setSessionPhase] = useState<"warmup" | "training" | "cooldown">("warmup");
   const [sessionComplete, setSessionComplete] = useState(false);
+  const [reviewInitiated, setReviewInitiated] = useState(false);
   const [showFullWorkout, setShowFullWorkout] = useState(false);
-  const { messages: chatMessages, isLoading: chatLoading, sendText, tapOption, reportPain, addSystemMessage } = useChatService();
+  const { messages: chatMessages, isLoading: chatLoading, sendText, tapOption, reportPain, addSystemMessage, addArnoldReply } = useChatService();
   const exerciseScrollRef = useRef<ScrollView>(null);
   const exerciseLayouts = useRef<Record<number, { y: number; height: number }>>({});
 
@@ -521,11 +522,16 @@ export default function SessionScreen({ navigation, route }: any) {
     const isLastSet = currentSetIdx >= currentEx.sets - 1;
     const isLastExercise = currentExIdx >= currentPhaseExercises.length - 1;
 
-    // Log the set
+    // Log the set.
+    // perceivedDifficulty is NOT set here — it's user feedback, not planner
+    // intent. It gets populated from the end-of-session review (or mid-session
+    // chat). If the user skips review, it stays undefined and autoregulation
+    // won't fire for that exercise.
     const completed: CompletedSet = {
       exerciseId: currentEx.id,
       setNumber: currentSetIdx,
       repsCompleted: currentEx.reps,
+      addedWeightKg: currentEx.addedWeightKg,
       timestamp: new Date().toISOString(),
     };
     logSet(completed);
@@ -603,6 +609,14 @@ export default function SessionScreen({ navigation, route }: any) {
     navigation.goBack();
   };
 
+  // When the user closes the chat after tapping "Yes" on the review
+  // screen, finish the session instead of reverting to the review buttons.
+  useEffect(() => {
+    if (reviewInitiated && !chatOpen) {
+      handleFinish();
+    }
+  }, [chatOpen, reviewInitiated]);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Back / Close button */}
@@ -652,9 +666,49 @@ export default function SessionScreen({ navigation, route }: any) {
           <View style={styles.completeContainer}>
             <Text style={styles.completeTitle}>Session Complete</Text>
             <Text style={styles.completeSub}>{completedSets} sets logged</Text>
-            <TouchableOpacity style={styles.finishButton} onPress={handleFinish}>
-              <Text style={styles.finishText}>Finish</Text>
-            </TouchableOpacity>
+
+            <Text style={styles.reviewPrompt}>Want to review your training?</Text>
+            <Text style={styles.reviewSubtext}>
+              Arnold adapts based on how it actually felt. Tap No if all good.
+            </Text>
+
+            <View style={styles.reviewButtonsRow}>
+              <TouchableOpacity
+                style={styles.reviewButtonYes}
+                onPress={() => {
+                  const sessionName = activeSession?.plannedSession?.label ?? "your session";
+                  const setsLogged = activeSession?.completedSets?.length ?? 0;
+
+                  addArnoldReply(
+                    `Nice work finishing ${sessionName} — ${setsLogged} sets logged. How did it feel overall?`,
+                    "quick",
+                    [
+                      { id: "review_easy", label: "Way too easy", action: "followup", value: "The session felt way too easy today." },
+                      { id: "review_solid", label: "Felt solid", action: "followup", value: "The session felt about right, solid effort." },
+                      { id: "review_hard", label: "Way too hard", action: "followup", value: "The session felt way too hard today." },
+                    ],
+                  );
+                  setReviewInitiated(true);
+                  setChatOpen(true);
+                }}
+              >
+                <Text style={styles.reviewButtonYesText}>Yes</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.reviewButtonNo}
+                onPress={handleFinish}
+              >
+                <Text style={styles.reviewButtonNoText}>No</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.reviewButtonMaybe}
+                onPress={handleFinish}
+              >
+                <Text style={styles.reviewButtonMaybeText}>Not sure</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           <>
@@ -958,6 +1012,68 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
     color: colors.bg,
+  },
+  reviewPrompt: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+    textAlign: "center",
+    marginTop: 32,
+    marginBottom: 6,
+  },
+  reviewSubtext: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginBottom: 24,
+    paddingHorizontal: 32,
+    lineHeight: 18,
+  },
+  reviewButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 24,
+    width: "100%",
+  },
+  reviewButtonYes: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: "#34C759",
+    alignItems: "center",
+  },
+  reviewButtonYesText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
+  },
+  reviewButtonNo: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: "#E63946",
+    alignItems: "center",
+  },
+  reviewButtonNoText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
+  },
+  reviewButtonMaybe: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+  },
+  reviewButtonMaybeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textSecondary,
   },
 
   // Bottom controls

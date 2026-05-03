@@ -444,6 +444,90 @@ function buildDay3(
   };
 }
 
+/** Day 4 — Legs */
+function buildLegDay(
+  weekId: string,
+  dayOfWeek: number,
+  phase: PlanPhase,
+  weekInPhase: number,
+  isDeload: boolean,
+): PlannedSession {
+  const prefix = `${weekId}_d4`;
+  const prog = PHASE_PROGRAMMING[phase] || PHASE_PROGRAMMING.accumulation;
+
+  const exercises: PlannedExercise[] = [
+    makeExercise(`${prefix}_sq`, "weighted_squat", "Barbell Back Squat", "main",
+      isDeload ? 2 : prog.sets, isDeload ? 6 : getWaveReps(phase, weekInPhase), 180, prog.intent,
+      { rpeTarget: prog.rpe }),
+    makeExercise(`${prefix}_lu`, "acc_lunges", "Bulgarian Split Squats", "volume",
+      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
+      { notes: "Per leg" }),
+    makeExercise(`${prefix}_rdl`, "acc_rdl", "Romanian Deadlift", "volume",
+      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate"),
+    makeExercise(`${prefix}_core`, "acc_hanging_leg_raises", "Hanging Leg Raises", "accessory",
+      isDeload ? 2 : 3, isDeload ? 8 : 12, 60, "easy"),
+    makeExercise(`${prefix}_calf`, "acc_calf_raises", "Calf Raises", "accessory",
+      isDeload ? 2 : 3, isDeload ? 10 : 20, 45, "easy"),
+  ];
+
+  const warmUp: PlannedExercise[] = [
+    makeWarmup(`${prefix}_wu0`, "Bodyweight Squats", 2, 10, false),
+    makeWarmup(`${prefix}_wu1`, "Hip Circles", 1, 10, false),
+    makeWarmup(`${prefix}_wu2`, "Leg Swings", 1, 10, false),
+    makeWarmup(`${prefix}_wu3`, "Deep Squat Hold", 1, 60, true),
+    makeWarmup(`${prefix}_wu4`, "Ankle Circles", 1, 10, false),
+  ];
+
+  const cooldown: PlannedExercise[] = [
+    makeCooldown(`${prefix}_cd0`, "Quad Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd1`, "Hamstring Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd2`, "Hip Flexor Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd3`, "Calf Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd4`, "Pigeon Pose", 1, 60),
+    makeCooldown(`${prefix}_cd5`, "Deep Squat Hold", 1, 90),
+  ];
+
+  return {
+    id: prefix, weekId, dayOfWeek, label: "Legs", phase, exercises,
+    warmUpExercises: warmUp,
+    cooldownExercises: cooldown,
+  };
+}
+
+/** Day 5 — Upper Volume */
+function buildUpperVolume(
+  weekId: string,
+  dayOfWeek: number,
+  phase: PlanPhase,
+  weekInPhase: number,
+  isDeload: boolean,
+): PlannedSession {
+  const prefix = `${weekId}_d5`;
+
+  const exercises: PlannedExercise[] = [
+    makeExercise(`${prefix}_dip`, "weighted_dip", "Dips (Volume)", "volume",
+      isDeload ? 2 : 4, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
+      { notes: "Lighter weight, higher reps. Building volume." }),
+    makeExercise(`${prefix}_pull`, "weighted_pullup", "Pull-ups (Volume)", "volume",
+      isDeload ? 2 : 4, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
+      { notes: "Lighter weight, higher reps." }),
+    makeExercise(`${prefix}_pushup`, "acc_weighted_pushups", "Weighted Push-ups", "accessory",
+      isDeload ? 2 : 3, 12, 60, "easy"),
+    makeExercise(`${prefix}_row`, "acc_rows", "Rows (Band or Inverted)", "accessory",
+      isDeload ? 2 : 3, 12, 60, "easy"),
+    makeExercise(`${prefix}_fp`, "acc_face_pulls", "Face Pulls (Band)", "accessory",
+      3, 15, 60, "easy"),
+    makeExercise(`${prefix}_core`, "acc_hollow_body", "Hollow Body Hold", "accessory",
+      3, 30, 60, "easy", { holdSeconds: 30 }),
+  ];
+
+  return {
+    id: prefix, weekId, dayOfWeek, label: "Upper Volume", phase, exercises,
+    warmUpExercises: getWarmupExercises("push", prefix),
+    cooldownExercises: getCooldownExercises("push", prefix),
+  };
+}
+
 // ── Weight Stamping ─────────────────────────────────────────────────────────
 
 function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
@@ -454,7 +538,7 @@ function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
   return null;
 }
 
-function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
+function stampWeights(session: PlannedSession, e1rm: E1RMProfile, dayType?: "heavy" | "peak_singles"): void {
   let rampIdx = 0;
   let lastRampProgId = "";
   for (const ex of session.exercises) {
@@ -462,23 +546,29 @@ function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
     if (!pattern) continue;
     if (ex.exerciseRole === "warmup" || ex.exerciseRole === "cooldown" || ex.exerciseRole === "skill") continue;
 
-    // Track ramp-up index per exercise group (resets when progressionId changes)
     if (ex.exerciseRole === "ramp_up") {
       if (ex.progressionId !== lastRampProgId) {
         rampIdx = 0;
         lastRampProgId = ex.progressionId;
       }
-      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx);
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx, dayType);
       rampIdx++;
     } else {
-      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole, undefined, dayType);
     }
   }
 }
 
 // ── Main Generator ──────────────────────────────────────────────────────────
 
-const SESSION_BUILDERS = [buildDay1, buildDay2, buildDay3];
+function getSessionBuilders(daysPerWeek: number) {
+  switch (daysPerWeek) {
+    case 2: return [buildDay1, buildDay2];
+    case 4: return [buildDay1, buildDay2, buildDay3, buildLegDay];
+    case 5: return [buildDay1, buildDay2, buildDay3, buildLegDay, buildUpperVolume];
+    default: return [buildDay1, buildDay2, buildDay3]; // 3-day is the base
+  }
+}
 
 export function generateStreetLifterIntermediate(
   userId: string,
@@ -487,7 +577,9 @@ export function generateStreetLifterIntermediate(
   benchmarks?: UserBenchmarks,
 ): Mesocycle {
   const mesoId = `meso_sl_int_${Date.now()}`;
-  const sessionsPerWeek = Math.min(schedule.daysPerWeek, 3);
+  const daysPerWeek = Math.min(Math.max(schedule.daysPerWeek, 2), 5);
+  const sessionsPerWeek = daysPerWeek;
+  const sessionBuilders = getSessionBuilders(daysPerWeek);
   const e1rm = benchmarks ? buildE1RMProfile(benchmarks) : null;
 
   const weeks: PlanWeek[] = [];
@@ -503,9 +595,12 @@ export function generateStreetLifterIntermediate(
       const days = schedule.preferredDays.slice(0, sessionsPerWeek);
 
       for (let s = 0; s < days.length; s++) {
-        const builder = SESSION_BUILDERS[s % 3];
+        const builder = sessionBuilders[s % sessionBuilders.length];
         const session = builder(weekId, days[s], block.phase, weekInPhase, isDeload);
-        if (e1rm) stampWeights(session, e1rm);
+        if (e1rm) {
+          const dayType = (s % sessionBuilders.length === 2 && daysPerWeek >= 3) ? "peak_singles" as const : "heavy" as const;
+          stampWeights(session, e1rm, dayType);
+        }
         sessions.push(session);
       }
 

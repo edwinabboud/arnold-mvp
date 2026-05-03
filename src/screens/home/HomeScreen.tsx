@@ -2,19 +2,20 @@
 // HomeScreen — Main dashboard after onboarding
 // =============================================================================
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
-import { findCurrentSession, getSessionSummary } from "../../utils/sessionFinder";
+import { findCurrentSession, getSessionSummary, getWeekSessions } from "../../utils/sessionFinder";
+import { PlannedSession } from "../../types";
 import { supabase } from "../../config/supabase";
 
 const formatPathName = (path: string): string => {
@@ -61,10 +62,45 @@ export default function HomeScreen({ navigation }: any) {
   const activeMesocycle = useStore((s) => s.activeMesocycle);
   const startSession = useStore((s) => s.startSession);
   const sessionHistory = useStore((s) => s.sessionHistory);
+  const adaptationQueue = useStore((s) => s.adaptationQueue);
+  const lastAppliedAdjustments = useStore((s) => s.lastAppliedAdjustments);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [overrideSession, setOverrideSession] = useState<PlannedSession | null>(null);
+  // When the user taps "Undo" on the cascade pill, suppress cascade for
+  // the rest of this component's lifetime. Reverts to the rest-day card.
+  const [cascadeUndone, setCascadeUndone] = useState(false);
+  // DEV-only: when true, force the cascade pill to render even if no real
+  // miss occurred. Lets devs verify the pill UI without a real calendar
+  // alignment. Toggled by the "Sim cascade" button in the DEBUG panel.
+  const [forceCascade, setForceCascade] = useState(false);
+
+  const checkAndResetWeeklyStreak = useStore((s) => s.checkAndResetWeeklyStreak);
+
+  // Streak reset check on mount. Idempotent — only resets if previous
+  // Mon-Sun week was fully missed and user has prior session history.
+  useEffect(() => {
+    checkAndResetWeeklyStreak();
+  }, [checkAndResetWeeklyStreak]);
 
   const schedule = profile?.schedule;
 
-  const sessionInfo = activeMesocycle ? findCurrentSession(activeMesocycle, sessionHistory) : null;
+  const defaultSessionInfo = activeMesocycle
+    ? findCurrentSession(activeMesocycle, sessionHistory, { skipCascade: cascadeUndone })
+    : null;
+
+  // When user long-presses and picks a different session, override the
+  // displayed one. Not persisted — lives for this render only.
+  const baseSessionInfo = overrideSession && defaultSessionInfo
+    ? { ...defaultSessionInfo, session: overrideSession, dayLabel: "Swapped" }
+    : defaultSessionInfo;
+
+  // DEV-only: force the cascade pill to render so devs can verify the UI
+  // without waiting for a real calendar miss. Real cascade still works
+  // through baseSessionInfo's cascadedFromDayLabel (set by findCurrentSession).
+  const sessionInfo = (__DEV__ && forceCascade && baseSessionInfo && !overrideSession && !cascadeUndone)
+    ? { ...baseSessionInfo, cascadedFromDayLabel: baseSessionInfo.cascadedFromDayLabel ?? "Monday" }
+    : baseSessionInfo;
 
   const handleStartSession = () => {
     if (!sessionInfo) return;
@@ -105,6 +141,96 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
+  // DEV-only: simulate a full session with a chosen difficulty for every set.
+  // Picks the FIRST undone session in the current week so consecutive taps
+  // chain through Push/Pull/Peak/Legs without waiting for clock days.
+  const handleSimulateSession = (difficulty: "easy" | "moderate" | "challenging") => {
+    if (!activeMesocycle) {
+      console.warn("[ARNOLD] No active mesocycle to simulate.");
+      return;
+    }
+
+    const weekSessions = getWeekSessions(activeMesocycle, sessionHistory);
+    const next = weekSessions.find(s => !s.completedThisWeek);
+
+    if (!next) {
+      console.warn("[ARNOLD] All sessions in this week already done. DEV RESET to start over.");
+      return;
+    }
+
+    const session = next.session;
+    console.log(`[ARNOLD DEBUG] Sim picked session: "${session.label}" (${session.exercises.length} exercises, id: ${session.id})`);
+
+    // Start the session — this also applies any queued weight adaptations.
+    startSession(session, "long");
+
+    // Build CompletedSet entries for every set of every exercise.
+    const allExercises = [
+      ...session.warmUpExercises,
+      ...session.exercises,
+      ...session.cooldownExercises,
+    ];
+    const completedSets: any[] = [];
+    for (const ex of allExercises) {
+      for (let setIdx = 0; setIdx < ex.sets; setIdx++) {
+        completedSets.push({
+          exerciseId: ex.id,
+          setNumber: setIdx,
+          repsCompleted: ex.reps,
+          perceivedDifficulty: difficulty,
+          addedWeightKg: ex.addedWeightKg,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    // Inject the simulated completed sets, then end.
+    useStore.setState((s) => ({
+      activeSession: s.activeSession ? {
+        ...s.activeSession,
+        completedSets,
+      } : null,
+    }));
+
+    useStore.getState().endSession();
+
+    console.log(`[ARNOLD] SIMULATED session "${session.label}" — all sets at "${difficulty}" difficulty.`);
+  };
+
+  // DEV-only: force-show the cascade pill. Tap-to-show; dismiss via the
+  // pill's own Undo button (production code path). Re-tap to show again.
+  const handleSimCascade = () => {
+    setForceCascade(true);
+    setCascadeUndone(false);
+    console.log("[ARNOLD] DEV — forcing cascade pill on. Tap Undo on the pill to dismiss.");
+  };
+
+  // DEV-only: backdate all session logs to 14 days ago, set a non-zero
+  // streak if needed, then trigger the reset check.
+  const handleSimMissedWeek = () => {
+    const state = useStore.getState();
+    if (state.sessionHistory.length === 0) {
+      console.warn("[ARNOLD] Sim missed week: no session history. Run Sim Easy first.");
+      return;
+    }
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const backdated = state.sessionHistory.map(log => ({
+      ...log,
+      completedAt: fourteenDaysAgo,
+      startedAt: fourteenDaysAgo,
+    }));
+    const fakeStreaks =
+      state.streaks.currentDaily === 0 && state.streaks.currentWeekly === 0
+        ? { ...state.streaks, currentDaily: 5, currentWeekly: 1 }
+        : state.streaks;
+    useStore.setState({
+      sessionHistory: backdated,
+      streaks: fakeStreaks,
+    });
+    state.checkAndResetWeeklyStreak();
+    console.log("[ARNOLD] Sim missed week: backdated logs, ran reset check.");
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -122,9 +248,116 @@ export default function HomeScreen({ navigation }: any) {
               <TouchableOpacity onPress={() => supabase.auth.signOut()} style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 4 }}>
                 <Text style={{ fontSize: 10, color: "#E63946" }}>SIGN OUT</Text>
               </TouchableOpacity>
+              <TouchableOpacity onPress={() => setDebugOpen(o => !o)} style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "rgba(245,166,35,0.08)", borderRadius: 4 }}>
+                <Text style={{ fontSize: 10, color: "#F5A623" }}>
+                  {debugOpen ? "DEBUG \u25BC" : "DEBUG \u25B6"}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
+
+        {__DEV__ && debugOpen && (
+          <View style={debugStyles.panel}>
+            <Text style={debugStyles.heading}>Autoregulation Loop</Text>
+
+            <Text style={debugStyles.section}>Simulate session</Text>
+            <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+              <TouchableOpacity
+                style={[debugStyles.simButton, { backgroundColor: "rgba(52,199,89,0.15)" }]}
+                onPress={() => handleSimulateSession("easy")}
+                disabled={!activeMesocycle}
+              >
+                <Text style={[debugStyles.simButtonText, { color: "#34C759" }]}>Sim Easy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[debugStyles.simButton, { backgroundColor: "rgba(245,166,35,0.15)" }]}
+                onPress={() => handleSimulateSession("moderate")}
+                disabled={!activeMesocycle}
+              >
+                <Text style={[debugStyles.simButtonText, { color: "#F5A623" }]}>Sim Solid</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[debugStyles.simButton, { backgroundColor: "rgba(230,57,70,0.15)" }]}
+                onPress={() => handleSimulateSession("challenging")}
+                disabled={!activeMesocycle}
+              >
+                <Text style={[debugStyles.simButtonText, { color: "#E63946" }]}>Sim Hard</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={debugStyles.section}>Cascade pill</Text>
+            <TouchableOpacity
+              style={[
+                debugStyles.simButton,
+                {
+                  backgroundColor: "rgba(245,166,35,0.15)",
+                  alignSelf: "flex-start",
+                  paddingHorizontal: 14,
+                  marginBottom: 8,
+                },
+              ]}
+              onPress={handleSimCascade}
+              disabled={!activeMesocycle}
+            >
+              <Text style={[debugStyles.simButtonText, { color: "#F5A623" }]}>
+                Sim cascade
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={debugStyles.section}>Streak reset</Text>
+            <TouchableOpacity
+              style={[
+                debugStyles.simButton,
+                {
+                  backgroundColor: "rgba(230,57,70,0.15)",
+                  alignSelf: "flex-start",
+                  paddingHorizontal: 14,
+                  marginBottom: 8,
+                },
+              ]}
+              onPress={handleSimMissedWeek}
+            >
+              <Text style={[debugStyles.simButtonText, { color: "#E63946" }]}>
+                Sim missed week
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={debugStyles.section}>Last applied on session start</Text>
+            {lastAppliedAdjustments.length === 0 ? (
+              <Text style={debugStyles.empty}>(nothing applied yet — finish a session, then start the next)</Text>
+            ) : (
+              lastAppliedAdjustments.map((line, i) => (
+                <Text key={i} style={debugStyles.line}>{"\u2022"} {line}</Text>
+              ))
+            )}
+
+            <Text style={debugStyles.section}>
+              Adaptation queue ({adaptationQueue.items.length} items)
+            </Text>
+            {adaptationQueue.items.length === 0 ? (
+              <Text style={debugStyles.empty}>(empty)</Text>
+            ) : (
+              adaptationQueue.items.map((item) => (
+                <View key={item.id} style={debugStyles.item}>
+                  <Text style={debugStyles.itemTitle}>
+                    {item.exerciseName} — {item.type}
+                  </Text>
+                  <Text style={debugStyles.itemMeta}>
+                    change: {item.change}
+                    {item.weightDeltaKg != null ? ` (${item.weightDeltaKg > 0 ? "+" : ""}${item.weightDeltaKg}kg)` : ""}
+                  </Text>
+                  <Text style={[
+                    debugStyles.itemFlags,
+                    { color: item.applied ? "#5A5A5E" : "#F5A623" },
+                  ]}>
+                    applied: {item.applied ? "YES" : "NO"}  {"\u00B7"}  surfaced: {item.surfaced ? "yes" : "no"}  {"\u00B7"}  response: {item.userResponse ?? "none"}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        )}
 
         {/* Streak Card */}
         <View style={styles.streakCard}>
@@ -162,6 +395,18 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         )}
 
+        {/* Cascade pill — shows when an earlier missed session was rolled forward to today */}
+        {sessionInfo?.cascadedFromDayLabel && !overrideSession && (
+          <View style={styles.cascadePill}>
+            <Text style={styles.cascadePillText}>
+              Moved from {sessionInfo.cascadedFromDayLabel}
+            </Text>
+            <TouchableOpacity onPress={() => setCascadeUndone(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.cascadePillUndo}>Undo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Session CTA */}
         {sessionInfo ? (
           <TouchableOpacity
@@ -171,7 +416,9 @@ export default function HomeScreen({ navigation }: any) {
               sessionInfo.isCompleted && { borderColor: "#34C75930" },
             ]}
             activeOpacity={0.8}
-            onPress={sessionInfo.isToday && !sessionInfo.isCompleted ? handleStartSession : undefined}
+            onPress={!sessionInfo.isCompleted ? handleStartSession : undefined}
+            onLongPress={!sessionInfo.isCompleted ? () => setSwapModalOpen(true) : undefined}
+            delayLongPress={350}
           >
             <View style={[
               styles.sessionBadge,
@@ -184,10 +431,13 @@ export default function HomeScreen({ navigation }: any) {
                 !sessionInfo.isToday && { color: colors.textSecondary },
                 sessionInfo.isCompleted && { color: "#34C759" },
               ]}>
-                {sessionInfo.isCompleted ? "COMPLETED ✓" : sessionInfo.isToday ? "TODAY" : `NEXT: ${sessionInfo.dayLabel.toUpperCase()}`}
+                {sessionInfo.isCompleted ? "COMPLETED ✓" : sessionInfo.isToday ? "TODAY" : "REST DAY"}
               </Text>
             </View>
             <Text style={styles.sessionTitle}>{sessionInfo.session.label}</Text>
+            {!sessionInfo.isToday && !sessionInfo.isCompleted && (
+              <Text style={styles.nextDayNote}>Next: {sessionInfo.dayLabel}</Text>
+            )}
             <Text style={styles.sessionSubtitle}>
               {getSessionSummary(sessionInfo)}
             </Text>
@@ -200,10 +450,17 @@ export default function HomeScreen({ navigation }: any) {
                 {getSessionType(sessionInfo.session.label)}
               </Text>
             </View>
-            {sessionInfo.isToday && (
+            {!sessionInfo.isCompleted && (
               <View style={styles.startRow}>
-                <Text style={[styles.startText, sessionInfo.isCompleted && { color: "#34C759", fontWeight: "600" }]}>
-                  {sessionInfo.isCompleted ? "Session logged ✓" : "Start Session →"}
+                <Text style={styles.startText}>
+                  {sessionInfo.isToday ? "Start Session →" : "Train anyway →"}
+                </Text>
+              </View>
+            )}
+            {sessionInfo.isCompleted && (
+              <View style={styles.startRow}>
+                <Text style={[styles.startText, { color: "#34C759", fontWeight: "600" }]}>
+                  Session logged ✓
                 </Text>
               </View>
             )}
@@ -248,6 +505,58 @@ export default function HomeScreen({ navigation }: any) {
             })}
           </View>
         </View>
+        {/* Swap session modal */}
+        {swapModalOpen && activeMesocycle && (
+          <View style={styles.swapModalOverlay}>
+            <TouchableOpacity
+              style={styles.swapModalBackdrop}
+              activeOpacity={1}
+              onPress={() => setSwapModalOpen(false)}
+            />
+            <View style={styles.swapModalSheet}>
+              <Text style={styles.swapModalTitle}>Switch session</Text>
+              <Text style={styles.swapModalSubtitle}>
+                Pick any session from this week. Completed ones are dimmed.
+              </Text>
+              {getWeekSessions(activeMesocycle, sessionHistory).map(opt => (
+                <TouchableOpacity
+                  key={opt.session.id}
+                  style={[
+                    styles.swapOption,
+                    opt.completedThisWeek && styles.swapOptionDisabled,
+                  ]}
+                  disabled={opt.completedThisWeek}
+                  onPress={() => {
+                    setOverrideSession(opt.session);
+                    setSwapModalOpen(false);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[
+                      styles.swapOptionTitle,
+                      opt.completedThisWeek && { color: colors.textMuted },
+                    ]}>
+                      {opt.session.label}
+                    </Text>
+                    <Text style={styles.swapOptionDay}>
+                      {opt.dayLabel} · {opt.session.exercises.length} exercises
+                      {opt.completedThisWeek ? " · Done this week" : ""}
+                    </Text>
+                  </View>
+                  {opt.completedThisWeek && (
+                    <Text style={styles.swapOptionCheck}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.swapCancelButton}
+                onPress={() => setSwapModalOpen(false)}
+              >
+                <Text style={styles.swapCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -336,6 +645,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
+  nextDayNote: {
+    fontSize: typography.sizes.xs,
+    color: colors.textMuted,
+    fontWeight: "500",
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
   sessionMeta: {
     flexDirection: "row",
     alignItems: "center",
@@ -353,6 +669,33 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     fontWeight: "700",
     color: colors.accent,
+  },
+  // Cascade pill
+  cascadePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: "rgba(245,166,35,0.08)",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(245,166,35,0.4)",
+  },
+  cascadePillText: {
+    fontSize: typography.sizes.sm,
+    color: "#F5A623",
+    fontWeight: "600",
+    flex: 1,
+  },
+  cascadePillUndo: {
+    fontSize: typography.sizes.sm,
+    color: "#F5A623",
+    fontWeight: "800",
+    textDecorationLine: "underline",
+    paddingHorizontal: spacing.sm,
   },
   // Program Status
   programStatusRow: {
@@ -412,4 +755,148 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   dayDotTextActive: { color: colors.accent },
+  // Swap modal
+  swapModalOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: "flex-end",
+    zIndex: 100,
+  },
+  swapModalBackdrop: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  swapModalSheet: {
+    backgroundColor: colors.bgCard,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl + spacing.md,
+  },
+  swapModalTitle: {
+    fontSize: typography.sizes.xl,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  swapModalSubtitle: {
+    fontSize: typography.sizes.sm,
+    color: colors.textMuted,
+    marginBottom: spacing.lg,
+  },
+  swapOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  swapOptionDisabled: {
+    opacity: 0.4,
+  },
+  swapOptionTitle: {
+    fontSize: typography.sizes.md,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  swapOptionDay: {
+    fontSize: typography.sizes.xs,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  swapOptionCheck: {
+    color: "#34C759",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  swapCancelButton: {
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+  swapCancelText: {
+    fontSize: typography.sizes.md,
+    fontWeight: "600",
+    color: colors.textSecondary,
+  },
+});
+
+// ── Dev-only debug panel styles ─────────────────────────────────────────────
+const debugStyles = StyleSheet.create({
+  panel: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    backgroundColor: "rgba(245,166,35,0.04)",
+    borderColor: "rgba(245,166,35,0.3)",
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  heading: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#F5A623",
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+  },
+  section: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "rgba(245,166,35,0.7)",
+    letterSpacing: 0.6,
+    marginTop: spacing.sm,
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  empty: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.3)",
+    fontStyle: "italic",
+  },
+  line: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.75)",
+    marginBottom: 2,
+  },
+  item: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  itemTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.9)",
+  },
+  itemMeta: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.55)",
+    marginTop: 1,
+  },
+  itemFlags: {
+    fontSize: 10,
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
+  simButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  simButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
 });

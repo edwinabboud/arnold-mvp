@@ -32,11 +32,15 @@ import {
   processSessionForAdaptation,
   SilentAdaptationResult,
 } from "./silentAdaptation";
+import { buildContextPacket, contextPacketToString } from "./contextPacket";
+import { buildE1RMProfile } from "./weightEngine";
+import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptationQueue";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-3-haiku-20240307";
+const DEFAULT_MODEL = "claude-3-haiku-20240307";
+const CONVERSATION_MODEL = "claude-sonnet-4-20250514";
 const MAX_TOKENS = 500;
 
 interface APIConfig {
@@ -45,7 +49,7 @@ interface APIConfig {
   maxTokens?: number;
 }
 
-let config: APIConfig = { apiKey: "", model: MODEL, maxTokens: MAX_TOKENS };
+let config: APIConfig = { apiKey: "", model: DEFAULT_MODEL, maxTokens: MAX_TOKENS };
 
 export function configureAPI(apiConfig: APIConfig): void {
   config = { ...config, ...apiConfig };
@@ -146,7 +150,7 @@ async function callAgent(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: config.model || MODEL,
+        model: agent === "conversation" ? CONVERSATION_MODEL : (config.model || DEFAULT_MODEL),
         max_tokens: config.maxTokens || MAX_TOKENS,
         system: systemPrompt,
         messages,
@@ -189,18 +193,55 @@ export type UserAction =
 export async function routeInteraction(
   action: UserAction,
   coachingContext: CoachingContext,
-  rulesDecision?: CoachingDecision
+  rulesDecision?: CoachingDecision,
+  adaptationQueue?: AdaptationQueue,
 ): Promise<ChatMessage> {
   const now = new Date().toISOString();
-  const contextStr = JSON.stringify({
-    phase: coachingContext.currentPhase,
-    programPath: coachingContext.programPath,
-    tier: coachingContext.tier,
-    todaySession: coachingContext.todaysSession?.label,
-    recentSessions: coachingContext.recentSessions.length,
-    streakDays: coachingContext.streaks.currentDaily,
-    rulesDecision,
-  });
+
+  // Build rich context from knowledge base
+  const e1rmProfile = coachingContext.todaysSession
+    ? buildE1RMProfile({
+        bodyweightKg: 70, // TODO: get from user profile when passed in
+        pullUpMaxReps: 0,
+        dipMaxReps: 0,
+      })
+    : null;
+
+  let contextStr: string;
+  try {
+    const weekNumber = 1; // TODO: derive from mesocycle state
+    const packet = buildContextPacket({
+      path: coachingContext.programPath,
+      tier: coachingContext.tier,
+      phase: coachingContext.currentPhase,
+      weekNumber,
+      session: coachingContext.todaysSession,
+      bodyweightKg: 70,
+      e1rmProfile,
+    });
+    contextStr = contextPacketToString(packet);
+  } catch {
+    // Fallback to minimal context if knowledge base fails
+    contextStr = JSON.stringify({
+      phase: coachingContext.currentPhase,
+      programPath: coachingContext.programPath,
+      tier: coachingContext.tier,
+    });
+  }
+
+  // Append rules decision
+  if (rulesDecision) {
+    contextStr += `\n\nRules decision: ${JSON.stringify(rulesDecision)}`;
+  }
+
+  // Append pending adaptations
+  const pendingAdaptations = adaptationQueue ? getUnsurfacedItems(adaptationQueue) : [];
+  if (pendingAdaptations.length > 0) {
+    contextStr += `\n\nPending adaptations (surface these to the user): ${formatForChat(pendingAdaptations)}`;
+  }
+
+  contextStr += `\n\nStreaks: ${coachingContext.streaks.currentDaily} day streak, ${coachingContext.streaks.totalSessions} total sessions.`;
+  contextStr += `\nRecent sessions: ${coachingContext.recentSessions.length} in history.`;
 
   switch (action.type) {
     case "exercise_question": {
@@ -277,13 +318,37 @@ export async function runPostSessionAnalysis(
   findings: Array<{ type: string; details: string }>;
   planChanges: Array<{ description: string; affectedWeeks: number[] }>;
 }> {
-  const contextStr = JSON.stringify({
-    phase: context.currentPhase,
-    recentSessions: context.recentSessions.slice(-5),
-    progressions: context.activeProgressions,
-    programPath: context.programPath,
-    tier: context.tier,
-  });
+  let contextStr: string;
+  try {
+    const packet = buildContextPacket({
+      path: context.programPath,
+      tier: context.tier,
+      phase: context.currentPhase,
+      weekNumber: 1,
+      session: context.todaysSession,
+      bodyweightKg: 70,
+      e1rmProfile: null,
+    });
+    contextStr = contextPacketToString(packet);
+    contextStr += `\n\nRecent sessions: ${JSON.stringify(context.recentSessions.slice(-5).map(s => ({
+      id: s.id,
+      status: s.status,
+      setsCompleted: s.completedSets.length,
+      painReports: s.painReports.length,
+    })))}`;
+    contextStr += `\nProgressions: ${JSON.stringify(context.activeProgressions.map(p => ({
+      id: p.progressionId,
+      status: p.status,
+      consecutiveSuccesses: p.consecutiveSuccesses,
+    })))}`;
+  } catch {
+    contextStr = JSON.stringify({
+      phase: context.currentPhase,
+      programPath: context.programPath,
+      tier: context.tier,
+      recentSessions: context.recentSessions.length,
+    });
+  }
 
   const response = await callAgent(
     "progressAnalyst",
@@ -326,6 +391,18 @@ export async function processCompletedSession(
   let llmAnalysis = null;
   if (chatWasEngaged) {
     llmAnalysis = await runPostSessionAnalysis(sessionLog, context);
+
+    // Log any adaptation items from the analyst
+    if (llmAnalysis && llmAnalysis.findings) {
+      try {
+        const rawResponse = JSON.stringify(llmAnalysis);
+        if (rawResponse.includes('adaptationItems')) {
+          console.log("[ARNOLD] Progress analyst findings:", llmAnalysis.findings.map((f: any) => f.details));
+        }
+      } catch {
+        // Non-critical — analyst findings are informational
+      }
+    }
   }
 
   return { silentAdaptation, llmAnalysis };

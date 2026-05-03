@@ -9,8 +9,8 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
 import { PROGRESSIONS, getProgressionTree, PATH_META } from "../../data/progressions";

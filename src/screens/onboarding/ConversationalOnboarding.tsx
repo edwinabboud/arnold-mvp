@@ -13,12 +13,12 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StyleSheet,
   Animated,
   Keyboard,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, typography, spacing, radius } from "../../theme";
 import ArnoldWaveform from "../../components/waveform/ArnoldWaveform";
 import { useStore } from "../../store/useStore";
@@ -32,7 +32,7 @@ import { generateSkillBuilderIntermediate } from "../../engine/generators/skillB
 import { generateHybridAthleteIntermediate } from "../../engine/generators/hybridAthleteIntermediate";
 import BenchmarkInput from "./BenchmarkInput";
 import { assignTier } from "../../engine/tierAssignment";
-import type { UserBenchmarks, FrontLeverLevel, PlancheLevel } from "../../types";
+import type { UserBenchmarks } from "../../types";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -202,8 +202,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
   
   // Step 1 - About You
   const [useMetric, setUseMetric] = useState(true);
-  const [userWeight, setUserWeight] = useState("");
-  const [userHeight, setUserHeight] = useState("");
+  const [userWeight, setUserWeight] = useState(__DEV__ ? "70" : "");
+  const [userHeight, setUserHeight] = useState(__DEV__ ? "170" : "");
   
   // Step 2 - Program Path Selection
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -237,7 +237,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
       if (step === 4) {
         goToStep(2); // From schedule, go back to path selection
       } else if (step === 8) {
-        goToStep(5); // Skip back over removed steps 6-7
+        goToStep(4); // Skip back over removed steps 5-7
       } else {
         goToStep(step - 1);
       }
@@ -255,8 +255,15 @@ export default function ConversationalOnboarding({ navigation }: any) {
   // Step 4 - Training days handler  
   const handleTrainingDaysSelect = (days: number) => {
     setTrainingDays(days);
-    setSelectedDays([]);
-    goToStep(5);
+    // Auto-assign evenly spread days, skip day picker
+    const autoSpread: Record<number, number[]> = {
+      2: [1, 4],          // Mon, Thu
+      3: [1, 3, 5],       // Mon, Wed, Fri
+      4: [1, 2, 4, 5],    // Mon, Tue, Thu, Fri
+      5: [1, 2, 3, 4, 5], // Mon-Fri
+    };
+    setSelectedDays(autoSpread[days] || [1, 3, 5]);
+    goToStep(8); // Skip day picker, go straight to targets
   };
 
   // Step 5 - Day selection handlers
@@ -614,48 +621,6 @@ export default function ConversationalOnboarding({ navigation }: any) {
               })}
             </ScrollView>
 
-            {__DEV__ && (
-              <TouchableOpacity
-                style={{
-                  marginTop: 12,
-                  padding: 16,
-                  borderRadius: 12,
-                  borderWidth: 1.5,
-                  borderColor: "rgba(255,0,0,0.3)",
-                  backgroundColor: "rgba(255,0,0,0.05)",
-                }}
-                onPress={() => {
-                  const devBm: UserBenchmarks = {
-                    pullUpMaxReps: 12,
-                    pullUpAddedKg: 10,
-                    dipMaxReps: 15,
-                    dipAddedKg: 15,
-                    squatMaxReps: 20,
-                    squatAddedKg: 0,
-                    bodyweightKg: 75,
-                    handstandHoldSec: 20,
-                    handstandWallOnly: false,
-                    frontLeverLevel: "tuck" as FrontLeverLevel,
-                    plancheLevel: "lean" as PlancheLevel,
-                    lSitHoldSec: 12,
-                    collectedAt: new Date().toISOString(),
-                    source: "onboarding" as const,
-                  };
-                  setSelectedPath("street_lifter");
-                  setTrainingDays(3);
-                  setSelectedDays([1, 3, 5]);
-                  setTimeout(() => handleComplete("experienced", devBm), 50);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={{ color: "#ff4444", fontSize: 16, fontWeight: "700" }}>
-                  DEV SKIP → Street Lifter Intermediate
-                </Text>
-                <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: 4 }}>
-                  Skips all onboarding. 3 days/week, intermediate benchmarks.
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         );
 
@@ -675,13 +640,32 @@ export default function ConversationalOnboarding({ navigation }: any) {
             <Text style={styles.stepSubtitle}>Days per week</Text>
 
             <View style={styles.daysPerWeekContainer}>
-              {[2, 3, 4, 5, 6].map(days => (
+              {([
+                { days: 2, label: "2", desc: "Push + Pull" },
+                { days: 3, label: "3", desc: "Push + Pull + Peak" },
+                { days: 4, label: "4", desc: "Push + Pull + Peak + Legs", recommended: true },
+                { days: 5, label: "5", desc: "4-day + Volume" },
+              ] as const).map(opt => (
                 <TouchableOpacity
-                  key={days}
-                  style={styles.daysPerWeekButton}
-                  onPress={() => handleTrainingDaysSelect(days)}
+                  key={opt.days}
+                  style={[
+                    styles.daysPerWeekButton,
+                    'recommended' in opt && opt.recommended && styles.daysPerWeekButtonRecommended,
+                  ]}
+                  onPress={() => handleTrainingDaysSelect(opt.days)}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.daysPerWeekText}>{days}</Text>
+                  {'recommended' in opt && opt.recommended && (
+                    <Text style={styles.recommendedBadge}>RECOMMENDED</Text>
+                  )}
+                  <Text style={[
+                    styles.daysPerWeekText,
+                    'recommended' in opt && opt.recommended && styles.daysPerWeekTextActive,
+                  ]}>{opt.label}</Text>
+                  <Text style={[
+                    styles.daysPerWeekDesc,
+                    'recommended' in opt && opt.recommended && styles.daysPerWeekDescActive,
+                  ]}>{opt.desc}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1255,21 +1239,50 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: "center",
     marginTop: 24,
+    paddingHorizontal: 16,
   },
   daysPerWeekButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 13,
+    flex: 1,
+    minHeight: 118,
+    borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.04)",
-    backgroundColor: "rgba(255,255,255,0.015)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.02)",
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+  },
+  daysPerWeekButtonRecommended: {
+    borderColor: "#F5A623",
+    backgroundColor: "rgba(245,166,35,0.08)",
+  },
+  recommendedBadge: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: "#F5A623",
+    marginBottom: 6,
   },
   daysPerWeekText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.4)",
+    fontSize: 26,
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.85)",
+    marginBottom: 6,
+    lineHeight: 30,
+  },
+  daysPerWeekTextActive: {
+    color: "#FFFFFF",
+  },
+  daysPerWeekDesc: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.55)",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  daysPerWeekDescActive: {
+    color: "rgba(255,255,255,0.85)",
   },
 
   // Step 5 - Which Days

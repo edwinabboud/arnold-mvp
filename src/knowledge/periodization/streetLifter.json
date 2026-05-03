@@ -1,0 +1,108 @@
+{
+  "path": "street_lifter",
+  "description": "Weighted calisthenics — heavy pull-ups, dips, squats. PR-driven.",
+  "beginner": {
+    "duration": "8-12 weeks (repeatable)",
+    "frequency": "3 days/week, 48h between sessions",
+    "split": "Full Body A/B/C rotation",
+    "progression": "Double progression within 5-8 rep range",
+    "deload": "Every 4th week",
+    "transitionToIntermediate": "3x10 pull-ups + 3x12 dips for 2 sessions",
+    "firstWeightProtocol": { "pullUps": "+2.5kg, reset to 3x5", "dips": "+5kg, reset to 3x5" }
+  },
+  "intermediate": {
+    "duration": "12-week mesocycle",
+    "frequency": "3-4 days/week",
+    "split": "Push/Pull/Push+Pull",
+    "phases": [
+      {
+        "name": "accumulation", "weeks": [1,2,3,4],
+        "topSetTarget": "1x6 @RPE 7-8", "backOffStyle": "3-4x6-8 variation cycling",
+        "volume": "high", "workingIntensity": 0.81, "backOffIntensity": 0.68, "finisherIntensity": 0.50,
+        "waveReps": [6,7,8,6],
+        "guidance": "Building work capacity. RPE 7-8 on top sets. Volume is high, intensity moderate. Users should feel worked but not destroyed."
+      },
+      {
+        "name": "deload", "weeks": [5],
+        "topSetTarget": "2x6 @RPE 5", "volume": "low",
+        "guidance": "Full recovery. Light loads, focus on movement quality."
+      },
+      {
+        "name": "strength", "weeks": [6,7,8,9],
+        "topSetTarget": "1x3-4 @RPE 8-9", "backOffStyle": "3x4-6 variation cycling",
+        "volume": "moderate", "workingIntensity": 0.88, "backOffIntensity": 0.75, "finisherIntensity": 0.55,
+        "waveReps": [5,4,3,4],
+        "guidance": "Pushing intensity. Heavier loads, fewer reps. RPE 8-9 on top sets."
+      },
+      {
+        "name": "deload", "weeks": [10],
+        "topSetTarget": "2x5 @RPE 5", "volume": "low",
+        "guidance": "Recovery before peaking. Stay light, stay fresh."
+      },
+      {
+        "name": "peaking", "weeks": [11],
+        "topSetTarget": "Heavy single @RPE 9", "backOffStyle": "2x3 @85%",
+        "volume": "low", "workingIntensity": 0.95, "backOffIntensity": 0.82,
+        "guidance": "Near-max expression. Heavy singles, full recovery between sets."
+      },
+      {
+        "name": "test", "weeks": [12],
+        "topSetTarget": "1RM protocol", "volume": "minimal", "workingIntensity": 0.98,
+        "guidance": "PR day. Follow the 1RM test protocol. Max 3 attempts above 95%."
+      }
+    ],
+    "dayTypes": [
+      {
+        "name": "heavy_dips", "label": "Day 1 — Heavy Dips (Push)",
+        "structure": ["ramp_up", "top_sets", "back_offs_variation", "finisher", "accessories"],
+        "primaryPattern": "pushing", "intensityOverride": null
+      },
+      {
+        "name": "heavy_pullups", "label": "Day 2 — Heavy Pull-ups (Pull)",
+        "structure": ["ramp_up", "top_sets", "variation_work", "volume", "isometric", "accessories"],
+        "primaryPattern": "pulling", "intensityOverride": null
+      },
+      {
+        "name": "peak_singles", "label": "Day 3 — Peak Singles + Secondary Pull",
+        "structure": ["ramp_up_ascending", "peak_singles", "chinup_working", "chinup_volume"],
+        "primaryPattern": "pushing",
+        "intensityOverride": "peaking",
+        "notes": "Weekly max expression. Always uses peaking intensity regardless of mesocycle phase."
+      }
+    ],
+    "variationCycling": {
+      "dips": [
+        { "week": 1, "code": "double_pause", "name": "Double Pause Dips", "sets": 3, "reps": 5 },
+        { "week": 2, "code": "tempo_4s", "name": "Tempo Dips (4s eccentric)", "sets": 3, "reps": 6 },
+        { "week": 3, "code": "paused_bottom", "name": "Paused Bottom Dips", "sets": 3, "reps": 5 },
+        { "week": 4, "code": "banded_neck", "name": "Banded Dips", "sets": 3, "reps": 8 }
+      ],
+      "pullUps": [
+        { "week": 1, "code": "paused_top", "name": "Paused Pull-ups (3s top)", "sets": 3, "reps": 3 },
+        { "week": 2, "code": "deadstop", "name": "Deadstop Pull-ups", "sets": 3, "reps": 4 },
+        { "week": 3, "code": "half_top", "name": "Half-Rep Pull-ups (top)", "sets": 3, "reps": 4 },
+        { "week": 4, "code": "clean", "name": "Clean Pull-ups (max volume)", "sets": 3, "reps": 7 }
+      ]
+    },
+    "weeklyVolumeTargets": {
+      "accumulation": { "pull": "16-20", "push": "16-20", "legs": "10-14", "core": "6-9" },
+      "strength": { "pull": "12-16", "push": "12-16", "legs": "8-12", "core": "6-9" },
+      "deload": { "pull": "6-8", "push": "6-8", "legs": "4-6", "core": "3-4" }
+    }
+  },
+  "e1rmFormula": "Epley: e1RM = weight × (1 + reps/30)",
+  "bwCoefficients": {
+    "pullUps": { "coefficient": 0.65, "formula": "total = added + (BW × 0.65)" },
+    "dips": { "coefficient": 0.70, "formula": "total = added + (BW × 0.70)" },
+    "squats": { "coefficient": 0, "formula": "total = added weight only" }
+  },
+  "testProtocol": [
+    { "intensity": "BW", "reps": 5, "rest": 60 },
+    { "intensity": "50%", "reps": 3, "rest": 90 },
+    { "intensity": "70%", "reps": 2, "rest": 120 },
+    { "intensity": "82%", "reps": 1, "rest": 180 },
+    { "intensity": "90%", "reps": 1, "rest": 240 },
+    { "intensity": "95%", "reps": 1, "rest": 300 },
+    { "intensity": "100-102%", "reps": 1, "rest": 300, "notes": "1RM attempt. Max 3 above 95%." }
+  ]
+}

@@ -13,8 +13,8 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, typography, spacing, radius } from "../../theme";
 import { EXERCISE_KB, ExerciseKnowledge } from "../../data/exerciseKnowledge";
 import { PROGRESSIONS } from "../../data/progressions";

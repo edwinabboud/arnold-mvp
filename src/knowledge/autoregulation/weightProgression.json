@@ -1,0 +1,30 @@
+{
+  "description": "RPE-based load adjustment table + silent adaptation signals. Applied after every session by the rules engine. No LLM needed.",
+  "autoregulationTable": [
+    { "condition": "All reps clean, RPE below target", "adjustment": "+2.5kg", "notes": "User is adapting. Push the load." },
+    { "condition": "All reps clean, at target RPE", "adjustment": "+1.25kg", "notes": "On track. Micro-load for continued progress." },
+    { "condition": "All reps clean, RPE above target", "adjustment": "No change", "notes": "Weight is right but user is working harder than intended. Consolidate." },
+    { "condition": "Missed 1 rep on last set", "adjustment": "No change — retry", "notes": "Weight is slightly ahead of capacity. Retry next session." },
+    { "condition": "Missed 2+ reps or RPE 10", "adjustment": "-2.5kg", "notes": "Too heavy. Drop back and rebuild." }
+  ],
+  "silentAdaptationSignals": [
+    { "signal": "All sets completed for 2-3 consecutive sessions", "action": "Advance progression or increase weight", "type": "advance" },
+    { "signal": "Exercise skipped 3+ sessions", "action": "Check for pain. If none, swap for equivalent.", "type": "investigate" },
+    { "signal": "Finisher reps trending up 3+ sessions", "action": "Fitness improving. Current programming is working.", "type": "positive" },
+    { "signal": "Finisher reps trending down 3+ sessions", "action": "Fatigue accumulating. Consider pulling deload forward.", "type": "fatigue_warning" },
+    { "signal": "2+ missed sessions in a row", "action": "Hold progression. If 1+ week gap, consider regression.", "type": "frequency_drop" },
+    { "signal": "RPE above target for 3+ sessions", "action": "Program too aggressive. Reduce weight by 2.5kg or drop 1 set.", "type": "overreach" }
+  ],
+  "progressionGates": {
+    "beginnerToIntermediate": {
+      "streetLifter": "3x10 pull-ups + 3x12 dips for 2 consecutive sessions",
+      "skillBuilder": "8+ pull-ups, 15+ dips, 60s wall HS, 15s tuck L-sit, 10 skin the cats",
+      "hybridAthlete": "8+ pull-ups, 12+ dips, 45s wall HS, 10s tuck L-sit, 10 skin the cats"
+    }
+  },
+  "rampUpPercentages": {
+    "description": "Applied to ADDED working weight, not total load.",
+    "percentages": [0.25, 0.50, 0.75, 0.85],
+    "notes": "Intermediate uses 3 sets (25%, 50%, 75%). Advanced/peaking uses 4 (add 85%)."
+  }
+}

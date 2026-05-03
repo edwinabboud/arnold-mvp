@@ -439,6 +439,57 @@ function buildSessionD(
   };
 }
 
+/** Session E — Legs + Core */
+function buildSessionE(
+  weekId: string, dayOfWeek: number, phase: PlanPhase, weekInPhase: number,
+  isDeload: boolean, coreId: string,
+): PlannedSession {
+  const prefix = `${weekId}_se`;
+  const sp = STRENGTH_BY_PHASE[phase] || STRENGTH_BY_PHASE.hypertrophy;
+  const reps = getPhaseWaveReps(phase, weekInPhase);
+
+  const lsitId = getLsitId(coreId);
+  const lsitPrilepin = getPrilepinHoldProgramming(estimateMaxHold(lsitId));
+
+  const exercises: PlannedExercise[] = [
+    makeEx(`${prefix}_sk0`, lsitId, null, "skill",
+      isDeload ? 2 : lsitPrilepin.sets, isDeload ? 5 : lsitPrilepin.holdTime,
+      90, isDeload ? "easy" : "moderate",
+      { holdSeconds: isDeload ? 5 : lsitPrilepin.holdTime, notes: "Compression work — skill first" }),
+    makeEx(`${prefix}_sq`, "legs_01", getName("legs_01"), "main",
+      isDeload ? 2 : sp.sets, isDeload ? 6 : reps, 120, sp.intent),
+    makeEx(`${prefix}_lu`, "acc_lunges", "Bulgarian Split Squats", "volume",
+      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
+      { notes: "Per leg" }),
+    makeEx(`${prefix}_core`, coreId, null, "accessory",
+      isDeload ? 2 : 3, isDeload ? 8 : 12, 60, "easy"),
+    makeEx(`${prefix}_calf`, "acc_calf_raises", "Calf Raises", "accessory",
+      isDeload ? 2 : 3, isDeload ? 10 : 20, 45, "easy"),
+  ];
+
+  const warmUp: PlannedExercise[] = [
+    makeWarmup(`${prefix}_wu0`, "Bodyweight Squats", 2, 10, false),
+    makeWarmup(`${prefix}_wu1`, "Hip Circles", 1, 10, false),
+    makeWarmup(`${prefix}_wu2`, "Leg Swings", 1, 10, false),
+    makeWarmup(`${prefix}_wu3`, "Deep Squat Hold", 1, 60, true),
+    makeWarmup(`${prefix}_wu4`, "Wrist Circles", 1, 15, false),
+  ];
+
+  const coolDown: PlannedExercise[] = [
+    makeCooldown(`${prefix}_cd0`, "Quad Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd1`, "Hamstring Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd2`, "Hip Flexor Stretch", 1, 30),
+    makeCooldown(`${prefix}_cd3`, "Pike Stretch", 1, 60),
+    makeCooldown(`${prefix}_cd4`, "Deep Squat Hold", 1, 90),
+  ];
+
+  return {
+    id: prefix, weekId, dayOfWeek, label: "Legs + Core (E)", phase, exercises,
+    warmUpExercises: warmUp,
+    cooldownExercises: coolDown,
+  };
+}
+
 // ── Weight Stamping ─────────────────────────────────────────────────────────
 
 function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
@@ -467,8 +518,8 @@ export function generateSkillBuilderIntermediate(
   benchmarks?: UserBenchmarks,
 ): Mesocycle {
   const mesoId = `meso_skb_int_${Date.now()}`;
-  const sessionsPerWeek = Math.min(schedule.daysPerWeek, 4);
-  const includePureSkill = sessionsPerWeek >= 4;
+  const daysPerWeek = Math.min(Math.max(schedule.daysPerWeek, 2), 5);
+  const sessionsPerWeek = daysPerWeek;
   const e1rm = benchmarks ? buildE1RMProfile(benchmarks) : null;
 
   const pullId = getActiveProgression("pull", progressions);
@@ -488,31 +539,44 @@ export function generateSkillBuilderIntermediate(
       const sessions: PlannedSession[] = [];
       const days = schedule.preferredDays.slice(0, sessionsPerWeek);
 
-      if (includePureSkill) {
-        // 4-day: A, B, C, D
-        const builders = [
-          (d: number) => buildSessionA(weekId, d, block.phase, weekInPhase, isDeload, pushId, coreId, skillId),
-          (d: number) => buildSessionB(weekId, d, block.phase, weekInPhase, isDeload, pullId, coreId),
-          (d: number) => buildSessionC(weekId, d, block.phase, weekInPhase, isDeload, coreId, skillId),
-          (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
-        ];
-        for (let s = 0; s < days.length; s++) {
-          const session = builders[s % 4](days[s]);
-          if (e1rm) stampWeights(session, e1rm);
-          sessions.push(session);
-        }
-      } else {
-        // 3-day: A, B, D (skip pure skill)
-        const builders = [
-          (d: number) => buildSessionA(weekId, d, block.phase, weekInPhase, isDeload, pushId, coreId, skillId),
-          (d: number) => buildSessionB(weekId, d, block.phase, weekInPhase, isDeload, pullId, coreId),
-          (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
-        ];
-        for (let s = 0; s < days.length; s++) {
-          const session = builders[s % 3](days[s]);
-          if (e1rm) stampWeights(session, e1rm);
-          sessions.push(session);
-        }
+      let builders: Array<(d: number) => PlannedSession>;
+
+      switch (daysPerWeek) {
+        case 2:
+          builders = [
+            (d: number) => buildSessionA(weekId, d, block.phase, weekInPhase, isDeload, pushId, coreId, skillId),
+            (d: number) => buildSessionB(weekId, d, block.phase, weekInPhase, isDeload, pullId, coreId),
+          ];
+          break;
+        case 4:
+          builders = [
+            (d: number) => buildSessionA(weekId, d, block.phase, weekInPhase, isDeload, pushId, coreId, skillId),
+            (d: number) => buildSessionB(weekId, d, block.phase, weekInPhase, isDeload, pullId, coreId),
+            (d: number) => buildSessionC(weekId, d, block.phase, weekInPhase, isDeload, coreId, skillId),
+            (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
+          ];
+          break;
+        case 5:
+          builders = [
+            (d: number) => buildSessionA(weekId, d, block.phase, weekInPhase, isDeload, pushId, coreId, skillId),
+            (d: number) => buildSessionB(weekId, d, block.phase, weekInPhase, isDeload, pullId, coreId),
+            (d: number) => buildSessionC(weekId, d, block.phase, weekInPhase, isDeload, coreId, skillId),
+            (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
+            (d: number) => buildSessionE(weekId, d, block.phase, weekInPhase, isDeload, coreId),
+          ];
+          break;
+        default: // 3-day
+          builders = [
+            (d: number) => buildSessionA(weekId, d, block.phase, weekInPhase, isDeload, pushId, coreId, skillId),
+            (d: number) => buildSessionB(weekId, d, block.phase, weekInPhase, isDeload, pullId, coreId),
+            (d: number) => buildSessionD(weekId, d, block.phase, weekInPhase, isDeload, pullId, pushId, coreId),
+          ];
+      }
+
+      for (let s = 0; s < days.length; s++) {
+        const session = builders[s % builders.length](days[s]);
+        if (e1rm) stampWeights(session, e1rm);
+        sessions.push(session);
       }
 
       weeks.push({
