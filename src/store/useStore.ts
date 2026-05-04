@@ -95,9 +95,15 @@ interface ArnoldStore {
 
   // Streaks
   streaks: StreakData;
+  /** Tracks which Mon-Sun week the increment/reset check last ran. ISO date string of that week's Monday (e.g. "2026-05-04"). Prevents double-firing. */
+  lastStreakCheckWeek: string | null;
+  /** Arnold-approved drops per week from Plan Realignment Option 2. Key = ISO date of week's Monday. Populated by Plan Realignment dialog (not yet built). */
+  weeklyDrops: Record<string, number>;
   incrementStreak: () => void;
   /** Resets currentDaily/currentWeekly to 0 if previous Mon-Sun week was fully missed AND user has sessions before that week. Idempotent. */
   checkAndResetWeeklyStreak: () => void;
+  /** Full weekly evaluation: increments currentWeekly if ≥ 100% adjusted sessions completed last week; resets to 0 otherwise. Runs once per calendar week (gated by lastStreakCheckWeek). */
+  checkAndIncrementWeekly: () => void;
   setStreaks: (streaks: StreakData) => void;
 
   // Session history
@@ -138,6 +144,16 @@ const initialStreaks: StreakData = {
   streakFreezes: 2,
   milestones: [],
 };
+
+/** Returns the ISO date string (YYYY-MM-DD) of the Monday that starts the calendar week containing `date`. Used to key lastStreakCheckWeek. */
+function getIsoWeekKey(date: Date): string {
+  const d = new Date(date);
+  const dow = d.getDay();
+  const daysBackToMonday = dow === 0 ? 6 : dow - 1;
+  d.setDate(d.getDate() - daysBackToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10); // e.g. "2026-05-04"
+}
 
 // Fire-and-forget sync — never blocks, never throws
 function bgSync(fn: () => Promise<void>) {
@@ -451,6 +467,8 @@ export const useStore = create<ArnoldStore>()(
 
       // ── Streaks ─────────────────────────────────────────────────────────
       streaks: initialStreaks,
+      lastStreakCheckWeek: null,
+      weeklyDrops: {},
       incrementStreak: () => {
         set((s) => {
           const newDaily = s.streaks.currentDaily + 1;
@@ -516,6 +534,95 @@ export const useStore = create<ArnoldStore>()(
         }
       },
 
+      checkAndIncrementWeekly: () => {
+        const state = get();
+
+        // Guard 1: no history at all — nothing to evaluate
+        if (state.sessionHistory.length === 0) return;
+
+        // Guard 2: only run once per calendar week
+        const now = new Date();
+        const currentWeekKey = getIsoWeekKey(now);
+        if (state.lastStreakCheckWeek === currentWeekKey) return;
+
+        // Guard 3: 60-second recent-session guard (same as checkAndResetWeeklyStreak)
+        // Prevents false evaluation during hot re-renders immediately after endSession
+        const sixtySecAgo = Date.now() - 60 * 1000;
+        const recentSession = state.sessionHistory.some(h => {
+          if (!h.completedAt) return false;
+          return new Date(h.completedAt).getTime() > sixtySecAgo;
+        });
+        if (recentSession) return;
+
+        // Compute last Mon-Sun week boundaries
+        const dow = now.getDay();
+        const daysBackToMonday = dow === 0 ? 6 : dow - 1;
+        const thisMonStart = new Date(now);
+        thisMonStart.setDate(thisMonStart.getDate() - daysBackToMonday);
+        thisMonStart.setHours(0, 0, 0, 0);
+        const lastMonStart = new Date(thisMonStart);
+        lastMonStart.setDate(lastMonStart.getDate() - 7);
+
+        const thisMon = thisMonStart.getTime();
+        const lastMon = lastMonStart.getTime();
+
+        // Count sessions completed last week; check for any session before last week
+        let sessionsLastWeek = 0;
+        let hasSessionBeforeLastWeek = false;
+        for (const log of state.sessionHistory) {
+          if (!log.completedAt) continue;
+          const t = new Date(log.completedAt).getTime();
+          if (t >= lastMon && t < thisMon) {
+            sessionsLastWeek++;
+          } else if (t < lastMon) {
+            hasSessionBeforeLastWeek = true;
+          }
+        }
+
+        // Guard 4: fresh account — don't penalise a user who has never trained before last week
+        if (sessionsLastWeek === 0 && !hasSessionBeforeLastWeek) return;
+
+        // Adjusted scheduled sessions for last week
+        // Original schedule minus any Arnold-approved drops (Plan Realignment Option 2).
+        // weeklyDrops is populated by the Plan Realignment dialog (not yet built — always 0 for now).
+        const scheduledPerWeek = state.profile?.schedule?.daysPerWeek ?? 0;
+        const lastWeekKey = getIsoWeekKey(lastMonStart);
+        const drops = state.weeklyDrops[lastWeekKey] ?? 0;
+        const adjustedScheduled = Math.max(0, scheduledPerWeek - drops);
+
+        // Mark this week as evaluated (do this before the early return so we
+        // don't re-evaluate if the mesocycle isn't set yet)
+        set({ lastStreakCheckWeek: currentWeekKey });
+
+        if (adjustedScheduled === 0) {
+          // No active mesocycle or schedule not set — can't evaluate, skip quietly
+          return;
+        }
+
+        if (sessionsLastWeek >= adjustedScheduled) {
+          // ✅ Hit 100%+ of adjusted schedule — increment week streak
+          const newWeekly = state.streaks.currentWeekly + 1;
+          set({
+            streaks: {
+              ...state.streaks,
+              currentWeekly: newWeekly,
+              longestWeekly: Math.max(newWeekly, state.streaks.longestWeekly),
+            },
+          });
+          console.log(`[ARNOLD] Week streak +1 → ${newWeekly} (${sessionsLastWeek}/${adjustedScheduled} sessions last week)`);
+        } else {
+          // ❌ Missed sessions — reset week streak
+          set({
+            streaks: {
+              ...state.streaks,
+              currentWeekly: 0,
+            },
+          });
+          console.log(`[ARNOLD] Week streak reset (${sessionsLastWeek}/${adjustedScheduled} sessions last week)`);
+        }
+        bgSync(() => syncStreaks(get().streaks));
+      },
+
       // ── History ─────────────────────────────────────────────────────────
       sessionHistory: [],
       addSessionLog: (log) =>
@@ -541,6 +648,8 @@ export const useStore = create<ArnoldStore>()(
           activeSession: null,
           sessionHistory: [],
           streaks: initialStreaks,
+          lastStreakCheckWeek: null,
+          weeklyDrops: {},
           adaptationQueue: createEmptyQueue(),
           lastAppliedAdjustments: [],
         });
@@ -555,6 +664,8 @@ export const useStore = create<ArnoldStore>()(
         activeMesocycle: state.activeMesocycle,
         userProgressions: state.userProgressions,
         streaks: state.streaks,
+        lastStreakCheckWeek: state.lastStreakCheckWeek,
+        weeklyDrops: state.weeklyDrops,
         sessionHistory: state.sessionHistory,
         adaptationQueue: state.adaptationQueue,
         lastAppliedAdjustments: state.lastAppliedAdjustments,

@@ -76,12 +76,13 @@ export default function HomeScreen({ navigation }: any) {
   const [forceCascade, setForceCascade] = useState(false);
 
   const checkAndResetWeeklyStreak = useStore((s) => s.checkAndResetWeeklyStreak);
+  const checkAndIncrementWeekly = useStore((s) => s.checkAndIncrementWeekly);
 
   // Streak reset check on mount. Idempotent — only resets if previous
   // Mon-Sun week was fully missed and user has prior session history.
   useEffect(() => {
-    checkAndResetWeeklyStreak();
-  }, [checkAndResetWeeklyStreak]);
+    checkAndIncrementWeekly();
+  }, [checkAndIncrementWeekly]);
 
   const schedule = profile?.schedule;
 
@@ -227,8 +228,10 @@ export default function HomeScreen({ navigation }: any) {
       sessionHistory: backdated,
       streaks: fakeStreaks,
     });
-    state.checkAndResetWeeklyStreak();
-    console.log("[ARNOLD] Sim missed week: backdated logs, ran reset check.");
+    // Clear the gate so checkAndIncrementWeekly fires even if already ran this week
+    useStore.setState({ lastStreakCheckWeek: null });
+    state.checkAndIncrementWeekly();
+    console.log("[ARNOLD] Sim missed week: backdated logs, ran increment/reset check.");
   };
 
   return (

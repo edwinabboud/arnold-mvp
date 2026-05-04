@@ -464,10 +464,12 @@ export default function ConversationalOnboarding({ navigation }: any) {
             </Text>
             <PrimaryButton label="Get started" onPress={() => goToStep(1)} />
             
-            {/* Dev skip button */}
-            <TouchableOpacity style={styles.devSkipButton} onPress={skipToHome}>
-              <Text style={styles.devSkipText}>Skip to app (dev)</Text>
-            </TouchableOpacity>
+            {/* Dev skip button — only visible in development builds */}
+            {__DEV__ && (
+              <TouchableOpacity style={styles.devSkipButton} onPress={skipToHome}>
+                <Text style={styles.devSkipText}>Skip to app (dev)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         );
 
