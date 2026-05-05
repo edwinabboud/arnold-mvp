@@ -28,6 +28,9 @@ export default {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+      eas: {
+        projectId: "d6afa6d1-50fa-4548-8af6-382078bad6c1",
+      },
     },
   },
 };

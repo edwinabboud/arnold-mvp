@@ -38,21 +38,37 @@ import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptation
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const API_URL = "https://api.anthropic.com/v1/messages";
+// API key removed from client — all Anthropic calls go through the Supabase proxy.
+// The proxy validates the user's JWT and adds the API key server-side.
+const PROXY_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-proxy";
 const DEFAULT_MODEL = "claude-3-haiku-20240307";
 const CONVERSATION_MODEL = "claude-sonnet-4-20250514";
 const MAX_TOKENS = 500;
 
 interface APIConfig {
-  apiKey: string;
   model?: string;
   maxTokens?: number;
+  // apiKey intentionally removed — key lives server-side in Supabase secrets
 }
 
-let config: APIConfig = { apiKey: "", model: DEFAULT_MODEL, maxTokens: MAX_TOKENS };
+let config: APIConfig = { model: DEFAULT_MODEL, maxTokens: MAX_TOKENS };
 
-export function configureAPI(apiConfig: APIConfig): void {
-  config = { ...config, ...apiConfig };
+// Kept for backwards compatibility — App.tsx calls this at startup.
+// apiKey field is ignored; only model/maxTokens are used.
+export function configureAPI(apiConfig: { apiKey?: string; model?: string; maxTokens?: number }): void {
+  config = { model: apiConfig.model ?? config.model, maxTokens: apiConfig.maxTokens ?? config.maxTokens };
+}
+
+// Returns the current Supabase session JWT for authenticating proxy requests.
+// Uses the existing shared client which already holds the user's session.
+async function getAuthToken(): Promise<string> {
+  try {
+    const { supabase } = await import("../config/supabase");
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? "";
+  } catch {
+    return "";
+  }
 }
 
 // ── Quick Response Bypass ────────────────────────────────────────────────────
@@ -142,11 +158,12 @@ async function callAgent(
   ];
 
   try {
-    const response = await fetch(API_URL, {
+    const authToken = await getAuthToken();
+    const response = await fetch(PROXY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": config.apiKey,
+        "Authorization": `Bearer ${authToken}`,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
