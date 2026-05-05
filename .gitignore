@@ -36,3 +36,6 @@ android/
 
 # Claude local config
 .claude/
+
+# Supabase CLI state
+supabase/.temp/
