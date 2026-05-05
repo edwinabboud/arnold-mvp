@@ -811,9 +811,6 @@ export default function SessionScreen({ navigation, route }: any) {
                   ? `${currentEx.reps}s hold`
                   : `${currentEx.reps} reps`}
               </Text>
-              <TouchableOpacity style={styles.skipRestButton} onPress={skipRest}>
-                <Text style={styles.skipRestText}>SKIP REST</Text>
-              </TouchableOpacity>
               <View style={styles.controlRow}>
                 <TouchableOpacity
                   style={styles.painButton}
@@ -824,7 +821,16 @@ export default function SessionScreen({ navigation, route }: any) {
                 >
                   <Text style={styles.painIcon}>!</Text>
                 </TouchableOpacity>
-                <View style={{ flex: 1 }} />
+
+                {/* SKIP REST occupies the DONE slot during rest phase */}
+                <TouchableOpacity
+                  style={styles.skipRestButton}
+                  onPress={skipRest}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.skipRestText}>SKIP REST</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.chatButton}
                   onPress={() => setChatOpen(true)}
@@ -1114,20 +1120,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   skipRestButton: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.02)",
+    flex: 1,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "#3A3A3C",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
   },
   skipRestText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    letterSpacing: 1,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
   },
   controlRow: {
     flexDirection: "row",
