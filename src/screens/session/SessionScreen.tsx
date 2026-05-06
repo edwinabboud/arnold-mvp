@@ -15,7 +15,7 @@ import {
   Modal,
   Dimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
 import {
@@ -313,6 +313,7 @@ function ExerciseRow({ exercise, showRest }: { exercise: PlannedExercise; showRe
 }
 
 function FullWorkoutModal({ visible, onClose, session, sessionDurationMin = 60 }: FullWorkoutModalProps) {
+  const insets = useSafeAreaInsets();
   const warmUp = session.warmUpExercises || [];
   const main = session.exercises;
   const cooldown = session.cooldownExercises || [];
@@ -321,7 +322,7 @@ function FullWorkoutModal({ visible, onClose, session, sessionDurationMin = 60 }
 
   return (
     <Modal visible={visible} animationType="slide">
-      <SafeAreaView style={fwStyles.container}>
+      <View style={[fwStyles.container, { paddingTop: insets.top }]}>
         <View style={fwStyles.header}>
           <TouchableOpacity onPress={onClose} style={fwStyles.closeButton}>
             <Text style={fwStyles.closeText}>✕</Text>
@@ -366,7 +367,7 @@ function FullWorkoutModal({ visible, onClose, session, sessionDurationMin = 60 }
             </Text>
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -661,7 +662,6 @@ export default function SessionScreen({ navigation, route }: any) {
         style={styles.exerciseScroll}
         contentContainerStyle={styles.exerciseContent}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={false}
       >
         {sessionComplete ? (
           <View style={styles.completeContainer}>
@@ -966,7 +966,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
+    minHeight: 56,
     gap: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.03)",
