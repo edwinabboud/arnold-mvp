@@ -3,7 +3,7 @@
 // Finds today's session or the next upcoming session from the mesocycle.
 // =============================================================================
 
-import { Mesocycle, PlannedSession } from "../types";
+import { Mesocycle, MovementPattern, PlannedSession } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -71,22 +71,22 @@ export function findCurrentSession(
     }
   }
 
-  // Cascade: today is a non-training day with no completed session yet. If
-  // the user missed exactly ONE scheduled session earlier this calendar
-  // (Mon–Sun) week, surface it as "today's" session so the user can just
-  // train. Two or more missed → fall through to "next upcoming" (Plan
-  // Realignment lives in Spec v2.3 and isn't built yet).
+  // Cascade (spec v2.3.1 §4.5.2): today is a non-training day with no
+  // completed session yet. Pick the OLDEST missed session this Mon–Sun week
+  // and surface it — UNLESS doing so would create a same-pattern conflict
+  // with today's planned session, today's completed session, or yesterday's
+  // completed session. On conflict, fall through to next-upcoming so the
+  // missed session re-evaluates tomorrow.
   if (!options.skipCascade) {
-    const missed = getMissedSessionsThisWeek(mesocycle, sessionHistory);
-    if (missed.length === 1) {
-      const m = missed[0];
+    const candidate = getCascadeCandidate(mesocycle, sessionHistory);
+    if (candidate && !candidate.conflict) {
       return buildSessionInfo(
-        m,
+        candidate.session,
         week.weekNumber,
         true,
         "Today",
         false,
-        DAY_NAMES[m.dayOfWeek]
+        "earlier this week",
       );
     }
   }
@@ -225,4 +225,99 @@ export function getMissedSessionsThisWeek(
     const earlierThisWeek = monFirst(s.dayOfWeek) < todayPos;
     return earlierThisWeek && !completedIds.has(s.id);
   });
+}
+
+/**
+ * Returns the oldest missed session in the current Mon–Sun week along with a
+ * flag for whether surfacing it as today would create a same-pattern conflict
+ * with today's planned session, today's completed session, or yesterday's
+ * completed session (within this Mon–Sun week).
+ *
+ * Returns null if no sessions are missed.
+ *
+ * Spec ref: v2.3.1 amendment §4.5.2 — multi-step pattern-aware cascade.
+ */
+export function getCascadeCandidate(
+  mesocycle: Mesocycle,
+  sessionHistory: Array<{ plannedSessionId: string; completedAt?: string }>,
+  now: Date = new Date(),
+): { session: PlannedSession; conflict: boolean; conflictReason?: string } | null {
+  const missed = getMissedSessionsThisWeek(mesocycle, sessionHistory, now);
+  if (missed.length === 0) return null;
+
+  // Sort by Mon-first ordering ascending; take the oldest.
+  const monFirst = (d: number) => (d === 0 ? 6 : d - 1);
+  const oldest = [...missed].sort((a, b) => monFirst(a.dayOfWeek) - monFirst(b.dayOfWeek))[0];
+
+  // Calendar Mon–Sun boundary (mirrors getMissedSessionsThisWeek).
+  const monSunStart = new Date(now);
+  const dow = monSunStart.getDay();
+  const daysBackToMonday = dow === 0 ? 6 : dow - 1;
+  monSunStart.setDate(monSunStart.getDate() - daysBackToMonday);
+  monSunStart.setHours(0, 0, 0, 0);
+  const monSunEnd = new Date(monSunStart);
+  monSunEnd.setDate(monSunEnd.getDate() + 7);
+
+  // Today / yesterday calendar bounds.
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const yesterdayEnd = new Date(todayStart);
+
+  // Locate this user's current week in the mesocycle.
+  const startDate = new Date(mesocycle.createdAt);
+  const daysSinceStart = Math.floor(
+    (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  const weekIndex = Math.floor(daysSinceStart / 7) % mesocycle.weeks.length;
+  const week = mesocycle.weeks[weekIndex];
+
+  const conflictPatterns = new Set<MovementPattern>();
+  let conflictReason: string | undefined;
+
+  // (a) Today's planned session — defensive; cascade flow shouldn't reach
+  // here when there's a today's session, but unioning it is cheap.
+  const todayPlanned = week?.sessions.find(s => s.dayOfWeek === now.getDay());
+  if (todayPlanned) {
+    todayPlanned.patterns.forEach(p => conflictPatterns.add(p));
+  }
+
+  // (b) + (c) Sessions completed today / yesterday (yesterday only if it falls
+  // inside this Mon–Sun week — Sunday → Monday transition resets context).
+  const allSessions = mesocycle.weeks.flatMap(w => w.sessions);
+  const findPlanned = (id: string) => allSessions.find(s => s.id === id);
+
+  for (const log of sessionHistory) {
+    if (!log.completedAt) continue;
+    const t = new Date(log.completedAt).getTime();
+
+    if (t >= todayStart.getTime() && t < todayEnd.getTime()) {
+      const planned = findPlanned(log.plannedSessionId);
+      if (planned) {
+        planned.patterns.forEach(p => conflictPatterns.add(p));
+        if (!conflictReason) conflictReason = `today already trained ${planned.patterns.join("/")}`;
+      }
+    }
+
+    if (
+      t >= yesterdayStart.getTime() && t < yesterdayEnd.getTime() &&
+      t >= monSunStart.getTime() && t < monSunEnd.getTime()
+    ) {
+      const planned = findPlanned(log.plannedSessionId);
+      if (planned) {
+        planned.patterns.forEach(p => conflictPatterns.add(p));
+        if (!conflictReason) conflictReason = `yesterday was ${planned.patterns.join("/")}`;
+      }
+    }
+  }
+
+  const conflict = oldest.patterns.some(p => conflictPatterns.has(p));
+  return {
+    session: oldest,
+    conflict,
+    conflictReason: conflict ? (conflictReason ?? "pattern overlap") : undefined,
+  };
 }

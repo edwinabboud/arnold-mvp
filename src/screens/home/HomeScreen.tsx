@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
-import { findCurrentSession, getSessionSummary, getWeekSessions } from "../../utils/sessionFinder";
+import { findCurrentSession, getCascadeCandidate, getSessionSummary, getWeekSessions } from "../../utils/sessionFinder";
 import { PlannedSession } from "../../types";
 import { supabase } from "../../config/supabase";
 
@@ -100,7 +100,7 @@ export default function HomeScreen({ navigation }: any) {
   // without waiting for a real calendar miss. Real cascade still works
   // through baseSessionInfo's cascadedFromDayLabel (set by findCurrentSession).
   const sessionInfo = (__DEV__ && forceCascade && baseSessionInfo && !overrideSession && !cascadeUndone)
-    ? { ...baseSessionInfo, cascadedFromDayLabel: baseSessionInfo.cascadedFromDayLabel ?? "Monday" }
+    ? { ...baseSessionInfo, cascadedFromDayLabel: baseSessionInfo.cascadedFromDayLabel ?? "earlier this week" }
     : baseSessionInfo;
 
   const handleStartSession = () => {
@@ -234,6 +234,59 @@ export default function HomeScreen({ navigation }: any) {
     console.log("[ARNOLD] Sim missed week: backdated logs, ran increment/reset check.");
   };
 
+  // DEV-only: insert a fake "yesterday" SessionLog whose plannedSession shares
+  // patterns with the cascade candidate, then re-evaluate cascade. Verifies
+  // pattern-conflict suppression (spec v2.3.1 §4.5.2).
+  const handleSimPatternConflict = () => {
+    const state = useStore.getState();
+    if (!state.activeMesocycle) {
+      console.warn("[ARNOLD] Sim pattern conflict: no active mesocycle.");
+      return;
+    }
+    const candidate = getCascadeCandidate(state.activeMesocycle, state.sessionHistory);
+    if (!candidate) {
+      console.log("[ARNOLD] Sim pattern conflict: no missed session to cascade. Run Sim missed week or skip days first.");
+      return;
+    }
+    const allSessions = state.activeMesocycle.weeks.flatMap(w => w.sessions);
+    const partner = allSessions.find(s =>
+      s.id !== candidate.session.id &&
+      s.patterns.some(p => candidate.session.patterns.includes(p))
+    );
+    if (!partner) {
+      console.log("[ARNOLD] Sim pattern conflict: no conflict candidate found, retry needed");
+      return;
+    }
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(12, 0, 0, 0);
+    const userId = useStore.getState().profile?.id ?? "dev_user";
+    const fakeLog = {
+      id: `sim_conflict_${Date.now()}`,
+      plannedSessionId: partner.id,
+      userId,
+      startedAt: yesterday.toISOString(),
+      completedAt: yesterday.toISOString(),
+      status: "completed" as const,
+      warmUpChoice: "short" as const,
+      cooldownChoice: "short" as const,
+      completedSets: [],
+      painReports: [],
+      swaps: [],
+    };
+    useStore.setState({
+      sessionHistory: [...state.sessionHistory, fakeLog],
+    });
+    setForceCascade(false);
+    setCascadeUndone(false);
+    const reEval = getCascadeCandidate(state.activeMesocycle, [...state.sessionHistory, fakeLog]);
+    if (reEval && reEval.conflict) {
+      console.log(`[ARNOLD] Sim pattern conflict: cascade suppressed for ${reEval.session.label} (${reEval.conflictReason})`);
+    } else {
+      console.log("[ARNOLD] Sim pattern conflict: no conflict candidate found, retry needed");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -290,23 +343,38 @@ export default function HomeScreen({ navigation }: any) {
             </View>
 
             <Text style={debugStyles.section}>Cascade pill</Text>
-            <TouchableOpacity
-              style={[
-                debugStyles.simButton,
-                {
-                  backgroundColor: "rgba(245,166,35,0.15)",
-                  alignSelf: "flex-start",
-                  paddingHorizontal: 14,
-                  marginBottom: 8,
-                },
-              ]}
-              onPress={handleSimCascade}
-              disabled={!activeMesocycle}
-            >
-              <Text style={[debugStyles.simButtonText, { color: "#F5A623" }]}>
-                Sim cascade
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+              <TouchableOpacity
+                style={[
+                  debugStyles.simButton,
+                  {
+                    backgroundColor: "rgba(245,166,35,0.15)",
+                    paddingHorizontal: 14,
+                  },
+                ]}
+                onPress={handleSimCascade}
+                disabled={!activeMesocycle}
+              >
+                <Text style={[debugStyles.simButtonText, { color: "#F5A623" }]}>
+                  Sim cascade
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  debugStyles.simButton,
+                  {
+                    backgroundColor: "rgba(74,144,217,0.15)",
+                    paddingHorizontal: 14,
+                  },
+                ]}
+                onPress={handleSimPatternConflict}
+                disabled={!activeMesocycle}
+              >
+                <Text style={[debugStyles.simButtonText, { color: "#4A90D9" }]}>
+                  Sim pattern conflict
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={debugStyles.section}>Streak reset</Text>
             <TouchableOpacity
