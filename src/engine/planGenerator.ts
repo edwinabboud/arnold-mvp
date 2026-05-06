@@ -313,6 +313,7 @@ function buildWeekSessions(
       dayOfWeek: day,
       label,
       phase,
+      patterns: patterns.patterns,
       exercises,
       warmUpExercises: warmUp,
       cooldownExercises: generateCooldown(patterns.patterns),

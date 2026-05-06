@@ -20,6 +20,7 @@ import {
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
+import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -280,7 +281,7 @@ function buildHeavyDips(
     makeEx(`${prefix}_acc1`, "acc_face_pulls", "Face Pulls (Band)", "accessory", isDeload ? 2 : 3, 15, 60, "easy"),
   );
 
-  return { id: prefix, weekId, dayOfWeek, label: "Hybrid Push (A)", phase, exercises, warmUpExercises: getWarmup("push", prefix), cooldownExercises: getCooldown("push", prefix) };
+  return { id: prefix, weekId, dayOfWeek, label: "Hybrid Push (A)", phase, patterns: derivePatternsFromExercises(exercises, PROGRESSIONS), exercises, warmUpExercises: getWarmup("push", prefix), cooldownExercises: getCooldown("push", prefix) };
 }
 
 function buildHeavyPullups(
@@ -328,7 +329,7 @@ function buildHeavyPullups(
 
   exercises.push(makeEx(`${prefix}_acc0`, "acc_rows", "Rows (Band or Inverted)", "accessory", isDeload ? 2 : 3, isDeload ? 8 : 10, 90, "easy"));
 
-  return { id: prefix, weekId, dayOfWeek, label: "Hybrid Pull (B)", phase, exercises, warmUpExercises: getWarmup("pull", prefix), cooldownExercises: getCooldown("pull", prefix) };
+  return { id: prefix, weekId, dayOfWeek, label: "Hybrid Pull (B)", phase, patterns: derivePatternsFromExercises(exercises, PROGRESSIONS), exercises, warmUpExercises: getWarmup("pull", prefix), cooldownExercises: getCooldown("pull", prefix) };
 }
 
 function buildPeakSingles(
@@ -367,7 +368,9 @@ function buildPeakSingles(
     );
   }
 
-  return { id: prefix, weekId, dayOfWeek, label: phase === "test" ? "Skill PR Test" : "Hybrid Peak (C)", phase, exercises,
+  return { id: prefix, weekId, dayOfWeek, label: phase === "test" ? "Skill PR Test" : "Hybrid Peak (C)", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: phase === "test" ? getWarmup("skill", prefix) : getWarmup("push", prefix),
     cooldownExercises: phase === "test" ? getCooldown("skill", prefix) : getCooldown("pull", prefix) };
 }
@@ -423,7 +426,9 @@ function buildSkillDay(
     exercises[0].notes = "Specialization: weighted PRs emphasis. Skill maintenance only.";
   }
 
-  return { id: prefix, weekId, dayOfWeek, label: "Skill Day", phase, exercises,
+  return { id: prefix, weekId, dayOfWeek, label: "Skill Day", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmup("skill", prefix), cooldownExercises: getCooldown("skill", prefix) };
 }
 
@@ -490,7 +495,9 @@ function buildLegsDay(
       { holdSeconds: isDeload ? 10 : 15 }),
   );
 
-  return { id: prefix, weekId, dayOfWeek, label: "Legs", phase, exercises,
+  return { id: prefix, weekId, dayOfWeek, label: "Legs", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmup("legs", prefix), cooldownExercises: getCooldown("legs", prefix) };
 }
 
@@ -517,7 +524,9 @@ function buildUpperVolume(
       { holdSeconds: isDeload ? 10 : 15 }),
   ];
 
-  return { id: prefix, weekId, dayOfWeek, label: "Upper Volume + Skills", phase, exercises,
+  return { id: prefix, weekId, dayOfWeek, label: "Upper Volume + Skills", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmup("push", prefix), cooldownExercises: getCooldown("push", prefix) };
 }
 

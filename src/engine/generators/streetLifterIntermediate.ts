@@ -19,6 +19,7 @@ import {
 import { PROGRESSIONS } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
+import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -269,6 +270,7 @@ function buildDay1(
     dayOfWeek,
     label: "Heavy Dips (Push)",
     phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
     warmUpExercises: getWarmupExercises("push", prefix),
     cooldownExercises: getCooldownExercises("push", prefix),
@@ -365,6 +367,7 @@ function buildDay2(
     dayOfWeek,
     label: "Heavy Pull-ups (Pull)",
     phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
     warmUpExercises: getWarmupExercises("pull", prefix),
     cooldownExercises: getCooldownExercises("pull", prefix),
@@ -438,6 +441,7 @@ function buildDay3(
     dayOfWeek,
     label: "Peak Singles + Secondary Pull",
     phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
     warmUpExercises: getWarmupExercises("push", prefix), // starts with dips
     cooldownExercises: getCooldownExercises("pull", prefix), // ends with pull work
@@ -488,7 +492,9 @@ function buildLegDay(
   ];
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Legs", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Legs", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: warmUp,
     cooldownExercises: cooldown,
   };
@@ -522,7 +528,9 @@ function buildUpperVolume(
   ];
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Upper Volume", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Upper Volume", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmupExercises("push", prefix),
     cooldownExercises: getCooldownExercises("push", prefix),
   };

@@ -17,6 +17,7 @@ import {
 } from "../../types";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
+import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -237,6 +238,7 @@ function buildSessionA(
     dayOfWeek,
     label: "Pull Emphasis (A)",
     phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
     warmUpExercises: getWarmupExercises("pull", `${weekId}_a`),
     cooldownExercises: getCooldownExercises("pull", `${weekId}_a`),
@@ -276,6 +278,7 @@ function buildSessionB(
     dayOfWeek,
     label: "Push Emphasis (B)",
     phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
     warmUpExercises: getWarmupExercises("push", `${weekId}_b`),
     cooldownExercises: getCooldownExercises("push", `${weekId}_b`),
@@ -312,6 +315,7 @@ function buildSessionC(
     dayOfWeek,
     label: "Legs + Full Body (C)",
     phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
     warmUpExercises: getWarmupExercises("legs", `${weekId}_c`),
     cooldownExercises: getCooldownExercises("legs", `${weekId}_c`),

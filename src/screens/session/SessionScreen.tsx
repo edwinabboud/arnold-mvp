@@ -438,6 +438,7 @@ export default function SessionScreen({ navigation, route }: any) {
     dayOfWeek: 1,
     label: "Push Day A",
     phase: "strength",
+    patterns: ["push", "skill", "core"],
     exercises: [
       { id: "e1", progressionId: "push_06", name: "Pseudo Planche Push-ups", sets: 4, reps: 6, restSeconds: 120, difficultyIntent: "challenging", notes: "Lean forward, hands by hips" },
       { id: "e2", progressionId: "push_08", name: "Ring Dips", sets: 3, reps: 8, restSeconds: 90, difficultyIntent: "moderate", notes: "Turn rings out at top" },

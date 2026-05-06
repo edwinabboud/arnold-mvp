@@ -168,6 +168,8 @@ export interface PlannedSession {
   dayOfWeek: number; // 0–6
   label: string; // e.g. "Push Day A"
   phase: PlanPhase;
+  /** Movement patterns trained in this session, used by cascade to avoid back-to-back same-pattern days. Derived at session construction time. */
+  patterns: MovementPattern[];
   exercises: PlannedExercise[];
   warmUpExercises: PlannedExercise[];
   cooldownExercises: PlannedExercise[];

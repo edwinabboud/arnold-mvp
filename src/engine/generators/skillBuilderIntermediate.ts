@@ -20,6 +20,7 @@ import {
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
+import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
 
@@ -280,7 +281,9 @@ function buildSessionA(
   ];
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Push + Skill (A)", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Push + Skill (A)", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmupExercises("push_skill", prefix),
     cooldownExercises: getCooldownExercises("push_skill", prefix),
   };
@@ -333,7 +336,9 @@ function buildSessionB(
   ];
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Pull + Skill (B)", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Pull + Skill (B)", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmupExercises("pull_skill", prefix),
     cooldownExercises: getCooldownExercises("pull_skill", prefix),
   };
@@ -393,7 +398,9 @@ function buildSessionC(
   // No strength exercises on pure skill day — flexibility handled by cooldown
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Pure Skill (C)", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Pure Skill (C)", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmupExercises("pure_skill", prefix),
     cooldownExercises: getCooldownExercises("pure_skill", prefix),
   };
@@ -433,7 +440,9 @@ function buildSessionD(
   ];
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Strength (D)", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Strength (D)", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: getWarmupExercises("strength", prefix),
     cooldownExercises: getCooldownExercises("strength", prefix),
   };
@@ -484,7 +493,9 @@ function buildSessionE(
   ];
 
   return {
-    id: prefix, weekId, dayOfWeek, label: "Legs + Core (E)", phase, exercises,
+    id: prefix, weekId, dayOfWeek, label: "Legs + Core (E)", phase,
+    patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
+    exercises,
     warmUpExercises: warmUp,
     cooldownExercises: coolDown,
   };

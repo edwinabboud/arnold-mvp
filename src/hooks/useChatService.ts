@@ -91,6 +91,7 @@ function buildCoachingContext(): CoachingContext {
       dayOfWeek: new Date().getDay(),
       label: 'Training',
       phase: 'base_building' as const,
+      patterns: [],
       exercises: [],
       warmUpExercises: [],
       cooldownExercises: [],

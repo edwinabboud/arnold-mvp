@@ -5,6 +5,7 @@
 // =============================================================================
 
 import {
+  MovementPattern,
   PlannedExercise,
   PlannedSession,
   PlanWeek,
@@ -218,6 +219,7 @@ function distributeToSessions(
       dayOfWeek: days[i],
       label: `Assessment — ${group.label}`,
       phase: "assessment",
+      patterns: group.patterns as MovementPattern[],
       exercises,
       warmUpExercises: warmUp,
       cooldownExercises: buildCooldown(group.patterns),
