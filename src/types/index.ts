@@ -135,10 +135,24 @@ export type ExerciseRole =
   | "complementary"  // Different movement plane, balanced development
   | "accessory"      // Weak links, stabilizers, antagonists
   | "skill"          // Skill practice (Skill Builder + Hybrid only)
+  | "skill_practice"   // Slot 2: submaximal CNS work, never autoregulated
+  | "skill_isometric"  // Slot 3: primary skill hold, unit=seconds, "Hold X seconds"
   | "ramp_up"        // Warm-up ramp sets before main lift
   | "finisher"       // Max(-2) fatigue gauge
   | "warmup"         // Warm-up exercises
   | "cooldown";      // Cooldown stretches
+
+/** A sub-item inside a grouped PlannedExercise (warm-up block, accessories
+ *  superset). Lighter than PlannedExercise — no progression tracking, no
+ *  autoregulation, no role. Pure display. */
+export interface SubExercise {
+  id: string;
+  name: string;
+  /** Display string for the prescription, e.g. "10 reps", "30s", "10 each side", "10 reps + 10s hold" */
+  prescription: string;
+  /** Optional cue or note (e.g. "controlled tempo", "palms down") */
+  notes?: string;
+}
 
 export interface PlannedExercise {
   id: string;
@@ -158,6 +172,14 @@ export interface PlannedExercise {
   rpeTarget?: number;
   /** Hold time in seconds for isometric exercises */
   holdSeconds?: number;
+  /** For grouped cards (warm-up block, accessories superset). When present,
+   *  the UI renders this PlannedExercise as a single card with the sub-items
+   *  listed inside. The parent's name becomes the card header. */
+  subExercises?: SubExercise[];
+  /** Optional label rendered on the card header for grouped cards.
+   *  E.g. "Warm-up" or "Accessories (superset)". When undefined, falls
+   *  back to the exercise's `name`. */
+  groupLabel?: string;
 }
 
 export type WarmUpLength = "short" | "long" | "skip";

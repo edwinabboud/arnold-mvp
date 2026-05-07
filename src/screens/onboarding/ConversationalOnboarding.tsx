@@ -645,8 +645,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
               {([
                 { days: 2, label: "2", desc: "Push + Pull" },
                 { days: 3, label: "3", desc: "Push + Pull + Peak" },
-                { days: 4, label: "4", desc: "Push + Pull + Peak + Legs", recommended: true },
-                { days: 5, label: "5", desc: "4-day + Volume" },
+                { days: 4, label: "4", desc: "Full split", recommended: true },
+                { days: 5, label: "5", desc: "Volume focus" },
               ] as const).map(opt => (
                 <TouchableOpacity
                   key={opt.days}
@@ -655,11 +655,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
                     'recommended' in opt && opt.recommended && styles.daysPerWeekButtonRecommended,
                   ]}
                   onPress={() => handleTrainingDaysSelect(opt.days)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.6}
                 >
-                  {'recommended' in opt && opt.recommended && (
-                    <Text style={styles.recommendedBadge}>RECOMMENDED</Text>
-                  )}
                   <Text style={[
                     styles.daysPerWeekText,
                     'recommended' in opt && opt.recommended && styles.daysPerWeekTextActive,
@@ -668,6 +665,9 @@ export default function ConversationalOnboarding({ navigation }: any) {
                     styles.daysPerWeekDesc,
                     'recommended' in opt && opt.recommended && styles.daysPerWeekDescActive,
                   ]}>{opt.desc}</Text>
+                  {'recommended' in opt && opt.recommended && (
+                    <Text style={styles.recommendedBadge}>RECOMMENDED</Text>
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
@@ -1237,54 +1237,61 @@ const styles = StyleSheet.create({
 
   // Step 4 - Days Per Week
   daysPerWeekContainer: {
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "center",
-    marginTop: 24,
+    flexDirection: "column",
+    gap: 10,
+    marginTop: 32,
     paddingHorizontal: 16,
   },
   daysPerWeekButton: {
-    flex: 1,
-    minHeight: 118,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.02)",
+    minHeight: 64,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 14,
   },
   daysPerWeekButtonRecommended: {
     borderColor: "#F5A623",
-    backgroundColor: "rgba(245,166,35,0.08)",
+    borderWidth: 1.5,
+    backgroundColor: "rgba(245,166,35,0.06)",
   },
   recommendedBadge: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.6,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1,
     color: "#F5A623",
-    marginBottom: 6,
+    marginBottom: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "rgba(245,166,35,0.15)",
+    overflow: "hidden",
   },
   daysPerWeekText: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "rgba(255,255,255,0.85)",
-    marginBottom: 6,
-    lineHeight: 30,
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    lineHeight: 28,
+    minWidth: 24,
+    textAlign: "center",
   },
   daysPerWeekTextActive: {
-    color: "#FFFFFF",
+    color: "#F5A623",
   },
   daysPerWeekDesc: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.55)",
-    textAlign: "center",
-    lineHeight: 14,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "400",
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "left",
+    lineHeight: 18,
   },
   daysPerWeekDescActive: {
-    color: "rgba(255,255,255,0.85)",
+    color: "rgba(255,255,255,0.9)",
   },
 
   // Step 5 - Which Days
