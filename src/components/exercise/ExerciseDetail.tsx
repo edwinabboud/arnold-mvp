@@ -14,7 +14,7 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography, spacing, radius } from "../../theme";
 import { EXERCISE_KB, ExerciseKnowledge } from "../../data/exerciseKnowledge";
 import { PROGRESSIONS } from "../../data/progressions";
@@ -99,12 +99,13 @@ export default function ExerciseDetail({
   exerciseName,
   exerciseNotes,
 }: ExerciseDetailProps) {
+  const insets = useSafeAreaInsets();
   const knowledge = EXERCISE_KB[progressionId];
   const progression = PROGRESSIONS.find((p) => p.id === progressionId);
 
   if (!knowledge || !progression) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           <Text style={styles.exerciseName}>{exerciseName || "Exercise"}</Text>
           <Text style={styles.patternLabel}>
@@ -121,12 +122,12 @@ export default function ExerciseDetail({
             <Text style={styles.gotItText}>Close</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -237,7 +238,7 @@ export default function ExerciseDetail({
           </Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
