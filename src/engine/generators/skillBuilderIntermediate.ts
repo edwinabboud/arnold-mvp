@@ -28,7 +28,6 @@ import {
 } from "../../types";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
-import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
 import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
@@ -595,31 +594,6 @@ function buildSessionE(
   };
 }
 
-// ── Weight Stamping ─────────────────────────────────────────────────────────
-
-function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
-  const id = exerciseId.toLowerCase();
-  if (id.includes("pull") || id.includes("chin") || id.includes("row")) return "pulling";
-  if (id.includes("dip") || id.includes("push") || id.includes("hspu")) return "pushing";
-  if (id.includes("squat") || id.includes("lunge") || id.includes("pistol")) return "legs";
-  return null;
-}
-
-function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
-  for (const ex of session.exercises) {
-    const pattern = getPattern(ex.progressionId);
-    if (!pattern) continue;
-    if (
-      ex.exerciseRole === "warmup" ||
-      ex.exerciseRole === "cooldown" ||
-      ex.exerciseRole === "skill" ||
-      ex.exerciseRole === "skill_practice" ||
-      ex.exerciseRole === "skill_isometric"
-    ) continue;
-    ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
-  }
-}
-
 // ── Main Generator ──────────────────────────────────────────────────────────
 
 export function generateSkillBuilderIntermediate(
@@ -631,7 +605,6 @@ export function generateSkillBuilderIntermediate(
   const mesoId = `meso_skb_int_${Date.now()}`;
   const daysPerWeek = Math.min(Math.max(schedule.daysPerWeek, 2), 5);
   const sessionsPerWeek = daysPerWeek;
-  const e1rm = benchmarks ? buildE1RMProfile(benchmarks) : null;
 
   const pullId = getActiveProgression("pull", progressions);
   const pushId = getActiveProgression("push", progressions);
@@ -686,7 +659,6 @@ export function generateSkillBuilderIntermediate(
 
       for (let s = 0; s < days.length; s++) {
         const session = builders[s % builders.length](days[s]);
-        if (e1rm) stampWeights(session, e1rm);
         sessions.push(session);
       }
 
