@@ -1,8 +1,16 @@
 // =============================================================================
-// ARNOLD — Skill Builder Intermediate Plan Generator
+// ARNOLD — Skill Builder Intermediate Plan Generator (v2.4.1 slim 7-card)
 // 12-week 4-day split: Push+Skill / Pull+Skill / Pure Skill / Strength.
-// Prilepin table for isometric holds. Block periodization:
-// Hypertrophy → Strength → Skill Peak → Test.
+// 7-card session structure on screen:
+//   1. Warm-up (grouped — single PlannedExercise w/ subExercises)
+//   2. Skill practice  (slot 2 — submaximal CNS work, never autoregulated)
+//   3. Skill isometric (slot 3 — Prilepin-driven primary hold)
+//   4. Complementary lift (slot 4 — phase-aware reps/sets)
+//   5. Accessories superset (slot 5 — grouped, 2 movements)
+//   6. Core finisher (slot 6)
+//   7. Cooldown (slot 7 — handled separately)
+// Block periodization: Hypertrophy → Strength → Skill Peak → Test.
+// Spec ref: arnold-product-spec-v2_4 §5.2 + v2.4.1 amendment.
 // =============================================================================
 
 import {
@@ -14,6 +22,7 @@ import {
   PlannedExercise,
   PlannedSession,
   Schedule,
+  SubExercise,
   UserBenchmarks,
   UserProgression,
 } from "../../types";
@@ -33,7 +42,7 @@ const INTERMEDIATE_PHASES: Array<{ phase: PlanPhase; weeks: number }> = [
   { phase: "test", weeks: 1 },
 ];
 
-// ── Prilepin Table ──────────────────────────────────────────────────────────
+// ── Prilepin Table (drives slot 3 skill_isometric) ──────────────────────────
 
 function getPrilepinHoldProgramming(maxHoldSeconds: number): { sets: number; holdTime: number } {
   if (maxHoldSeconds <= 10) return { sets: 6, holdTime: Math.round(maxHoldSeconds * 0.65) };
@@ -60,8 +69,6 @@ const STRENGTH_BY_PHASE: Record<string, { sets: number; reps: number; intent: Di
   test:         { sets: 2, reps: 5, intent: "easy" },
   deload:       { sets: 2, reps: 8, intent: "easy" },
 };
-
-// ── Wave Loading ────────────────────────────────────────────────────────────
 
 function getPhaseWaveReps(phase: PlanPhase, weekInPhase: number): number {
   const base = STRENGTH_BY_PHASE[phase] || STRENGTH_BY_PHASE.hypertrophy;
@@ -139,65 +146,84 @@ function makeEx(
   };
 }
 
-// ── Warm-ups & Cooldowns ────────────────────────────────────────────────────
+// ── v2.4.1: Grouped Warm-up Block ───────────────────────────────────────────
 
-function makeWarmup(id: string, name: string, sets: number, reps: number, iso: boolean): PlannedExercise {
+type SessionType = "push_skill" | "pull_skill" | "pure_skill" | "strength";
+
+/**
+ * Returns a single PlannedExercise representing the entire warm-up. Sub-items
+ * live in `subExercises`. UI renders this as one card. Per v2.4.1 amendment,
+ * MVP uses existing v1.0 warm-up pools — canonical 7-drill wrist sequence is
+ * deferred to v1.5.
+ */
+function buildGroupedWarmup(type: SessionType, prefix: string): PlannedExercise {
+  const p = `${prefix}_wu`;
+  let subs: SubExercise[];
+
+  switch (type) {
+    case "push_skill":
+      subs = [
+        { id: `${p}0`, name: "Wrist Circles", prescription: "1 × 15" },
+        { id: `${p}1`, name: "Wrist Rocks", prescription: "1 × 10" },
+        { id: `${p}2`, name: "Wrist Loading", prescription: "1 × 30s hold" },
+        { id: `${p}3`, name: "Shoulder Dislocates", prescription: "1 × 15" },
+        { id: `${p}4`, name: "Scap Push-ups", prescription: "2 × 10" },
+        { id: `${p}5`, name: "Cat-Cow", prescription: "1 × 10" },
+        { id: `${p}6`, name: "Hollow Body", prescription: "3 × 15s hold" },
+      ];
+      break;
+    case "pull_skill":
+      subs = [
+        { id: `${p}0`, name: "Band Pull-Aparts", prescription: "2 × 15" },
+        { id: `${p}1`, name: "Active Hang", prescription: "1 × 30s hold" },
+        { id: `${p}2`, name: "Scap Pulls", prescription: "2 × 8" },
+        { id: `${p}3`, name: "Thoracic Rotation", prescription: "1 × 10" },
+      ];
+      break;
+    case "pure_skill":
+      subs = [
+        { id: `${p}0`, name: "Wrist Circles", prescription: "1 × 15" },
+        { id: `${p}1`, name: "Wrist Rocks", prescription: "1 × 10" },
+        { id: `${p}2`, name: "Wrist Loading", prescription: "1 × 30s hold" },
+        { id: `${p}3`, name: "Shoulder Dislocates", prescription: "1 × 15" },
+        { id: `${p}4`, name: "Hip Circles", prescription: "1 × 10" },
+        { id: `${p}5`, name: "Cat-Cow", prescription: "1 × 10" },
+        { id: `${p}6`, name: "Hollow Body", prescription: "3 × 15s hold" },
+        { id: `${p}7`, name: "Active Hang", prescription: "1 × 30s hold" },
+      ];
+      break;
+    case "strength":
+      subs = [
+        { id: `${p}0`, name: "Arm Circles", prescription: "1 × 20" },
+        { id: `${p}1`, name: "Jumping Jacks", prescription: "1 × 30" },
+        { id: `${p}2`, name: "Band Pull-Aparts", prescription: "2 × 15" },
+        { id: `${p}3`, name: "Scap Push-ups", prescription: "2 × 10" },
+        { id: `${p}4`, name: "Scap Pulls", prescription: "2 × 8" },
+      ];
+      break;
+  }
+
   return {
-    id, progressionId: "warmup", name, sets, reps,
-    restSeconds: 0, difficultyIntent: "easy", exerciseRole: "warmup",
-    ...(iso ? { holdSeconds: reps } : {}),
+    id: `${prefix}_warmup`,
+    progressionId: "warmup",
+    name: "Warm-up",
+    groupLabel: "Warm-up",
+    sets: 1,
+    reps: 0,
+    restSeconds: 0,
+    difficultyIntent: "easy",
+    exerciseRole: "warmup",
+    subExercises: subs,
   };
 }
+
+// ── Cooldown (unchanged from v1.0) ──────────────────────────────────────────
 
 function makeCooldown(id: string, name: string, sets: number, hold: number): PlannedExercise {
   return {
     id, progressionId: "cooldown", name, sets, reps: hold,
     restSeconds: 0, difficultyIntent: "easy", exerciseRole: "cooldown", holdSeconds: hold,
   };
-}
-
-type SessionType = "push_skill" | "pull_skill" | "pure_skill" | "strength";
-
-function getWarmupExercises(type: SessionType, prefix: string): PlannedExercise[] {
-  const p = `${prefix}_wu`;
-  switch (type) {
-    case "push_skill":
-      return [
-        makeWarmup(`${p}0`, "Wrist Circles", 1, 15, false),
-        makeWarmup(`${p}1`, "Wrist Rocks", 1, 10, false),
-        makeWarmup(`${p}2`, "Wrist Loading", 1, 30, true),
-        makeWarmup(`${p}3`, "Shoulder Dislocates", 1, 15, false),
-        makeWarmup(`${p}4`, "Scap Push-ups", 2, 10, false),
-        makeWarmup(`${p}5`, "Cat-Cow", 1, 10, false),
-        makeWarmup(`${p}6`, "Hollow Body", 3, 15, true),
-      ];
-    case "pull_skill":
-      return [
-        makeWarmup(`${p}0`, "Band Pull-Aparts", 2, 15, false),
-        makeWarmup(`${p}1`, "Active Hang", 1, 30, true),
-        makeWarmup(`${p}2`, "Scap Pulls", 2, 8, false),
-        makeWarmup(`${p}3`, "Thoracic Rotation", 1, 10, false),
-      ];
-    case "pure_skill":
-      return [
-        makeWarmup(`${p}0`, "Wrist Circles", 1, 15, false),
-        makeWarmup(`${p}1`, "Wrist Rocks", 1, 10, false),
-        makeWarmup(`${p}2`, "Wrist Loading", 1, 30, true),
-        makeWarmup(`${p}3`, "Shoulder Dislocates", 1, 15, false),
-        makeWarmup(`${p}4`, "Hip Circles", 1, 10, false),
-        makeWarmup(`${p}5`, "Cat-Cow", 1, 10, false),
-        makeWarmup(`${p}6`, "Hollow Body", 3, 15, true),
-        makeWarmup(`${p}7`, "Active Hang", 1, 30, true),
-      ];
-    case "strength":
-      return [
-        makeWarmup(`${p}0`, "Arm Circles", 1, 20, false),
-        makeWarmup(`${p}1`, "Jumping Jacks", 1, 30, false),
-        makeWarmup(`${p}2`, "Band Pull-Aparts", 2, 15, false),
-        makeWarmup(`${p}3`, "Scap Push-ups", 2, 10, false),
-        makeWarmup(`${p}4`, "Scap Pulls", 2, 8, false),
-      ];
-  }
 }
 
 function getCooldownExercises(type: SessionType, prefix: string): PlannedExercise[] {
@@ -231,7 +257,97 @@ function getCooldownExercises(type: SessionType, prefix: string): PlannedExercis
   }
 }
 
-// ── Session Builders ────────────────────────────────────────────────────────
+// ── v2.4.1: Skill Practice (Slot 2) ─────────────────────────────────────────
+
+/**
+ * Returns slot 2 for an isometric-style skill practice. holdSeconds is half
+ * the user's estimated max — submaximal preparatory work that tunes the
+ * nervous system without accumulating fatigue. Never autoregulated.
+ */
+function makeSkillPracticeIso(
+  id: string,
+  progressionId: string,
+  name: string | null,
+  isDeload: boolean,
+): PlannedExercise {
+  const halfMax = Math.max(3, Math.round(estimateMaxHold(progressionId) / 2));
+  return makeEx(id, progressionId, name, "skill_practice",
+    isDeload ? 1 : 2, halfMax, 60, "easy",
+    { holdSeconds: halfMax, notes: "Submaximal — practice technique, stop before failure" });
+}
+
+/**
+ * Returns slot 2 for a dynamic skill practice (reps-based, e.g. Skin the Cat).
+ * 3 controlled reps per set. Same submaximal philosophy.
+ */
+function makeSkillPracticeDynamic(
+  id: string,
+  progressionId: string,
+  name: string | null,
+  isDeload: boolean,
+): PlannedExercise {
+  return makeEx(id, progressionId, name, "skill_practice",
+    isDeload ? 1 : 2, 3, 60, "easy",
+    { notes: "Submaximal — practice technique, stop before failure" });
+}
+
+// ── v2.4.1: Skill Isometric (Slot 3) — Prilepin-driven ──────────────────────
+
+function makeSkillIsometric(
+  id: string,
+  progressionId: string,
+  name: string | null,
+  isDeload: boolean,
+): PlannedExercise {
+  const prilepin = getPrilepinHoldProgramming(estimateMaxHold(progressionId));
+  const sets = isDeload ? 2 : prilepin.sets;
+  const holdSeconds = isDeload
+    ? Math.max(3, Math.round(prilepin.holdTime / 2))
+    : prilepin.holdTime;
+  return makeEx(id, progressionId, name, "skill_isometric",
+    sets, holdSeconds, isDeload ? 120 : 180, isDeload ? "easy" : "moderate",
+    {
+      holdSeconds,
+      notes: `Prilepin-based. ${prilepin.holdTime}s × ${prilepin.sets} sets at ~65% max hold.`,
+    });
+}
+
+// ── v2.4.1: Accessories Superset Block (Slot 5) ─────────────────────────────
+
+/**
+ * Returns a single grouped PlannedExercise with two supersetted accessory
+ * movements as subExercises. Sets/reps on the parent represent rounds and
+ * per-movement target reps. Inter-superset rest in restSeconds; intra-superset
+ * rest is zero (communicated in notes).
+ */
+function buildAccessoryBlock(
+  prefix: string,
+  isDeload: boolean,
+  accessories: Array<{ id: string; name: string; prescription?: string }>,
+): PlannedExercise {
+  const rounds = isDeload ? 2 : 3;
+  const reps = isDeload ? 10 : 12;
+  const subs: SubExercise[] = accessories.map((a, i) => ({
+    id: `${prefix}_acc_sub${i}`,
+    name: a.name,
+    prescription: a.prescription ?? "10–15 reps",
+  }));
+  return {
+    id: `${prefix}_acc`,
+    progressionId: "accessory_block",
+    name: "Accessories",
+    groupLabel: "Accessories (superset)",
+    sets: rounds,
+    reps,
+    restSeconds: 60,
+    difficultyIntent: "easy",
+    exerciseRole: "accessory",
+    subExercises: subs,
+    notes: "Superset — no rest between movements, 60s between rounds",
+  };
+}
+
+// ── Session Builders (5-entry exercises[] per v2.4.1) ───────────────────────
 
 /** Session A — Push + Skill */
 function buildSessionA(
@@ -244,47 +360,42 @@ function buildSessionA(
   const sets = getPhaseStrengthSets(phase, weekInPhase);
   const lsitId = getLsitId(coreId);
 
-  // Prilepin for L-sit
-  const lsitMaxHold = estimateMaxHold(lsitId);
-  const lsitPrilepin = getPrilepinHoldProgramming(lsitMaxHold);
-
-  // Handstand: use skill progression (skill_03 Wall Handstand or higher)
+  // Slot 2: handstand practice (submaximal). Use skill_03 (Wall Handstand)
+  // or higher if user has progressed.
   const skillTree = getProgressionTree("skill");
   const skillIdx = skillTree.findIndex(p => p.id === skillId);
   const hsId = skillIdx >= 2 ? skillId : "skill_03";
 
-  // Planche lean / pseudo planche push-ups
+  // Slot 4: pseudo planche push-ups (push variant from existing pool).
   const pushTree = getProgressionTree("push");
   const pushIdx = pushTree.findIndex(p => p.id === pushId);
-  const ppId = pushIdx >= 5 ? "push_06" : pushId; // Pseudo Planche Push-ups or current level
+  const ppId = pushIdx >= 5 ? "push_06" : pushId;
 
   const exercises: PlannedExercise[] = [
-    // Skills FIRST
-    makeEx(`${prefix}_sk0`, hsId, null, "skill",
-      isDeload ? 2 : 4, isDeload ? 30 : 45, 120, isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 30 : 45, notes: "Focus on alignment. Chest to wall." }),
-    makeEx(`${prefix}_sk1`, lsitId, null, "skill",
-      isDeload ? 2 : lsitPrilepin.sets, isDeload ? 5 : lsitPrilepin.holdTime, 90,
-      isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 5 : lsitPrilepin.holdTime, notes: "Prilepin-based hold time" }),
-    // Strength
-    makeEx(`${prefix}_m0`, ppId, null, "main",
-      isDeload ? 2 : sets, isDeload ? 6 : reps, 180, sp.intent),
-    makeEx(`${prefix}_m1`, "supplementary_pike_pushups", "Pike Push-ups", "volume",
-      isDeload ? 2 : 3, isDeload ? 6 : Math.min(reps + 2, 12), 120, isDeload ? "easy" : "moderate"),
-    // Accessories
-    makeEx(`${prefix}_a0`, pushId, null, "accessory",
-      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, "easy",
-      { notes: "Bodyweight dips for volume" }),
-    makeEx(`${prefix}_a1`, "supplementary_scap_pushups", "Scapular Push-ups (Protraction)", "accessory",
-      2, 12, 60, "easy"),
+    // Slot 2 — skill practice (handstand, submaximal)
+    makeSkillPracticeIso(`${prefix}_sk_p`, hsId, null, isDeload),
+    // Slot 3 — skill isometric (L-sit, Prilepin)
+    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload),
+    // Slot 4 — complementary lift (phase-aware)
+    makeEx(`${prefix}_comp`, ppId, null, "complementary",
+      isDeload ? 2 : sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
+      isDeload ? "easy" : sp.intent),
+    // Slot 5 — accessories grouped (skill-adjacent + antagonist)
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "supplementary_scap_pushups", name: "Scapular Push-ups (Protraction)" },
+      { id: "acc_face_pulls", name: "Face Pulls (Band)" },
+    ]),
+    // Slot 6 — core finisher (Hollow Body)
+    makeEx(`${prefix}_fin`, "core_01", "Hollow Body Hold", "finisher",
+      isDeload ? 2 : 3, isDeload ? 20 : 30, 60, isDeload ? "easy" : "moderate",
+      { holdSeconds: isDeload ? 20 : 30 }),
   ];
 
   return {
     id: prefix, weekId, dayOfWeek, label: "Push + Skill (A)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("push_skill", prefix),
+    warmUpExercises: [buildGroupedWarmup("push_skill", prefix)],
     cooldownExercises: getCooldownExercises("push_skill", prefix),
   };
 }
@@ -299,47 +410,41 @@ function buildSessionB(
   const reps = getPhaseWaveReps(phase, weekInPhase);
   const sets = getPhaseStrengthSets(phase, weekInPhase);
 
-  // Front lever — core_09 or user's core level
+  // Slot 3: front lever isometric — use core_09 if user has progressed,
+  // else their current core level.
   const coreTree = getProgressionTree("core");
   const coreIdx = coreTree.findIndex(p => p.id === coreId);
   const flIdx = coreTree.findIndex(p => p.id === "core_09");
   const flId = (flIdx >= 0 && coreIdx >= flIdx) ? "core_09" : coreId;
 
-  // Prilepin for front lever
-  const flMaxHold = estimateMaxHold(flId);
-  const flPrilepin = getPrilepinHoldProgramming(flMaxHold);
-
-  // Row fallback
+  // Slot 4: row variant (existing pool, 2 levels below the main pull lift).
   const rowId = getVolumeFallback(pullId, 2);
 
   const exercises: PlannedExercise[] = [
-    // Skills FIRST
-    makeEx(`${prefix}_sk0`, flId, null, "skill",
-      isDeload ? 2 : flPrilepin.sets, isDeload ? 3 : flPrilepin.holdTime,
-      isDeload ? 120 : 240, isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 3 : flPrilepin.holdTime, notes: "Prilepin-based. 60-70% max hold. Long rest between sets." }),
-    makeEx(`${prefix}_sk1`, "supplementary_skin_the_cat", "Skin the Cat", "skill",
-      isDeload ? 2 : 3, isDeload ? 3 : 5, 120, isDeload ? "easy" : "moderate",
-      { notes: "Controlled rotation through full ROM" }),
-    // Strength
-    makeEx(`${prefix}_m0`, pullId, null, "main",
-      isDeload ? 2 : sets, isDeload ? 6 : reps, 180, sp.intent),
-    makeEx(`${prefix}_v0`, rowId, null, "volume",
-      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
-      rowId === pullId ? { notes: "Higher reps for volume" } : undefined),
-    // Accessories
-    makeEx(`${prefix}_a0`, "core_02", null, "accessory",
-      isDeload ? 2 : 3, isDeload ? 15 : 25, 60, "easy",
-      { holdSeconds: isDeload ? 15 : 25 }),
-    makeEx(`${prefix}_a1`, "acc_face_pulls", null, "accessory",
-      isDeload ? 2 : 3, 15, 60, "easy"),
+    // Slot 2 — skill practice (Skin the Cat — dynamic, reps-based)
+    makeSkillPracticeDynamic(`${prefix}_sk_p`, "supplementary_skin_the_cat", "Skin the Cat", isDeload),
+    // Slot 3 — skill isometric (front lever, Prilepin)
+    makeSkillIsometric(`${prefix}_sk_i`, flId, null, isDeload),
+    // Slot 4 — complementary lift (row variant)
+    makeEx(`${prefix}_comp`, rowId, null, "complementary",
+      isDeload ? 2 : sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
+      isDeload ? "easy" : sp.intent),
+    // Slot 5 — accessories grouped
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "acc_face_pulls", name: "Face Pulls (Band)" },
+      { id: "supplementary_scap_pushups", name: "Scapular Push-ups (Protraction)" },
+    ]),
+    // Slot 6 — core finisher (Plank)
+    makeEx(`${prefix}_fin`, "core_02", "Plank Hold", "finisher",
+      isDeload ? 2 : 3, isDeload ? 20 : 30, 60, isDeload ? "easy" : "moderate",
+      { holdSeconds: isDeload ? 20 : 30 }),
   ];
 
   return {
     id: prefix, weekId, dayOfWeek, label: "Pull + Skill (B)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("pull_skill", prefix),
+    warmUpExercises: [buildGroupedWarmup("pull_skill", prefix)],
     cooldownExercises: getCooldownExercises("pull_skill", prefix),
   };
 }
@@ -350,6 +455,7 @@ function buildSessionC(
   isDeload: boolean, coreId: string, skillId: string,
 ): PlannedSession {
   const prefix = `${weekId}_sc`;
+  const sp = STRENGTH_BY_PHASE[phase] || STRENGTH_BY_PHASE.hypertrophy;
   const lsitId = getLsitId(coreId);
 
   // Handstand
@@ -357,51 +463,45 @@ function buildSessionC(
   const skillIdx = skillTree.findIndex(p => p.id === skillId);
   const hsId = skillIdx >= 2 ? skillId : "skill_03";
 
-  // Planche progression
-  const plancheId = skillIdx >= 5 ? skillId : "skill_06";
-
-  // Front lever
+  // Front lever for slot 4 complementary (a different upper-body skill from
+  // slot 3's L-sit primary)
   const coreTree = getProgressionTree("core");
   const coreIdx = coreTree.findIndex(p => p.id === coreId);
   const flIdx = coreTree.findIndex(p => p.id === "core_09");
   const flId = (flIdx >= 0 && coreIdx >= flIdx) ? "core_09" : coreId;
-
-  // Prilepin for all isometric skills
-  const hsPrilepin = getPrilepinHoldProgramming(estimateMaxHold(hsId));
-  const planchePrilepin = getPrilepinHoldProgramming(estimateMaxHold(plancheId));
-  const lsitPrilepin = getPrilepinHoldProgramming(estimateMaxHold(lsitId));
-
-  const holdMultiplier = phase === "skill_peaking" ? 1.15 : phase === "test" ? 1.0 : 1.0;
-  const setsMultiplier = phase === "skill_peaking" ? 1 : 0; // extra set during peaking
+  const flPrilepin = getPrilepinHoldProgramming(estimateMaxHold(flId));
 
   const exercises: PlannedExercise[] = [
-    // Handstand — longest block
-    makeEx(`${prefix}_sk0`, hsId, null, "skill",
-      isDeload ? 3 : (hsPrilepin.sets + setsMultiplier), isDeload ? 30 : Math.round(hsPrilepin.holdTime * holdMultiplier),
-      120, isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 30 : Math.round(hsPrilepin.holdTime * holdMultiplier),
-        notes: phase === "test" ? "PR attempt — max hold" : "Focus on alignment and breathing" }),
-    // Planche progression
-    makeEx(`${prefix}_sk1`, plancheId, null, "skill",
-      isDeload ? 2 : (planchePrilepin.sets + setsMultiplier), isDeload ? 5 : Math.round(planchePrilepin.holdTime * holdMultiplier),
-      180, isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 5 : Math.round(planchePrilepin.holdTime * holdMultiplier),
-        notes: phase === "test" ? "PR attempt — hardest progression you can hold" : "Prilepin-based. Quality over duration." }),
-    // L-sit / V-sit
-    makeEx(`${prefix}_sk2`, lsitId, null, "skill",
-      isDeload ? 2 : (lsitPrilepin.sets + setsMultiplier), isDeload ? 5 : Math.round(lsitPrilepin.holdTime * holdMultiplier),
-      90, isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 5 : Math.round(lsitPrilepin.holdTime * holdMultiplier),
-        notes: phase === "test" ? "PR attempt — max hold" : "Accumulate total hold time" }),
+    // Slot 2 — skill practice (handstand submaximal)
+    makeSkillPracticeIso(`${prefix}_sk_p`, hsId, null, isDeload),
+    // Slot 3 — skill isometric (L-sit, primary, Prilepin)
+    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload),
+    // Slot 4 — complementary (front lever variant — itself an isometric, but
+    // running it as the "complementary" slot keeps the 5-entry shape and
+    // gives the user a second skill movement on this dedicated skill day)
+    makeEx(`${prefix}_comp`, flId, null, "complementary",
+      isDeload ? 2 : flPrilepin.sets,
+      isDeload ? Math.max(3, Math.round(flPrilepin.holdTime / 2)) : flPrilepin.holdTime,
+      isDeload ? 120 : 180, isDeload ? "easy" : sp.intent,
+      { holdSeconds: isDeload ? Math.max(3, Math.round(flPrilepin.holdTime / 2)) : flPrilepin.holdTime,
+        notes: phase === "test" ? "PR attempt — hardest progression you can hold" : "Front lever progression — Prilepin-based" }),
+    // Slot 5 — accessories grouped
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "supplementary_scap_pushups", name: "Scapular Push-ups (Protraction)" },
+      { id: "acc_face_pulls", name: "Face Pulls (Band)" },
+    ]),
+    // Slot 6 — core finisher (max-effort L-sit attempt)
+    makeEx(`${prefix}_fin`, lsitId, null, "finisher",
+      isDeload ? 2 : 3, isDeload ? 20 : 30, 60, isDeload ? "easy" : "moderate",
+      { holdSeconds: isDeload ? 20 : 30,
+        notes: phase === "test" ? "PR attempt — max hold" : "Max effort — go close to failure" }),
   ];
-
-  // No strength exercises on pure skill day — flexibility handled by cooldown
 
   return {
     id: prefix, weekId, dayOfWeek, label: "Pure Skill (C)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("pure_skill", prefix),
+    warmUpExercises: [buildGroupedWarmup("pure_skill", prefix)],
     cooldownExercises: getCooldownExercises("pure_skill", prefix),
   };
 }
@@ -415,40 +515,49 @@ function buildSessionD(
   const sp = STRENGTH_BY_PHASE[phase] || STRENGTH_BY_PHASE.hypertrophy;
   const reps = getPhaseWaveReps(phase, weekInPhase);
   const sets = getPhaseStrengthSets(phase, weekInPhase);
+  const lsitId = getLsitId(coreId);
 
-  const pullVolId = getVolumeFallback(pullId, 2);
-  const pushVolId = getVolumeFallback(pushId, 2);
+  // Slot 3: handstand hold as the primary isometric for strength day.
+  const skillTree = getProgressionTree("skill");
+  const skillId = getActiveProgression("skill", []); // fallback only — we don't have benchmarks here
+  const skillIdx = skillTree.findIndex(p => p.id === skillId);
+  const hsId = skillIdx >= 2 ? skillId : "skill_03";
 
   const exercises: PlannedExercise[] = [
-    // Main lifts
-    makeEx(`${prefix}_m0`, pullId, null, "main",
-      isDeload ? 2 : sets, isDeload ? 6 : reps, 180, sp.intent),
-    makeEx(`${prefix}_m1`, pushId, null, "main",
-      isDeload ? 2 : sets, isDeload ? 6 : reps, 180, sp.intent),
-    // Volume
-    makeEx(`${prefix}_v0`, pullVolId, null, "volume",
-      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
-      pullVolId === pullId ? { notes: "Higher reps for volume" } : undefined),
-    makeEx(`${prefix}_v1`, pushVolId, null, "volume",
-      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
-      pushVolId === pushId ? { notes: "Higher reps for volume" } : undefined),
-    // Accessories
-    makeEx(`${prefix}_a0`, coreId, null, "accessory",
-      isDeload ? 2 : 3, 8, 60, "easy"),
-    makeEx(`${prefix}_a1`, "acc_face_pulls", null, "accessory",
-      2, 15, 60, "easy"),
+    // Slot 2 — skill practice (L-sit submaximal)
+    makeSkillPracticeIso(`${prefix}_sk_p`, lsitId, null, isDeload),
+    // Slot 3 — skill isometric (handstand, Prilepin)
+    makeSkillIsometric(`${prefix}_sk_i`, hsId, null, isDeload),
+    // Slot 4 — complementary (heavy push pulled into D for strength focus)
+    makeEx(`${prefix}_comp`, pushId, null, "complementary",
+      isDeload ? 2 : sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
+      isDeload ? "easy" : sp.intent),
+    // Slot 5 — accessories grouped (core hold + antagonist)
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "core_02", name: "Plank Hold", prescription: "20s hold" },
+      { id: "acc_face_pulls", name: "Face Pulls (Band)" },
+    ]),
+    // Slot 6 — core finisher (hanging knee raises / leg raises if available,
+    // else fall back to the user's coreId)
+    makeEx(`${prefix}_fin`, coreId, null, "finisher",
+      isDeload ? 2 : 3, isDeload ? 8 : 12, 60, isDeload ? "easy" : "moderate",
+      { notes: "Slow, controlled — full ROM" }),
   ];
+  // Note: pullId is intentionally unused on D in v2.4.1 (push is the
+  // dominant pattern of the slot 4 complementary). Keep it in the
+  // signature for compatibility with the existing call site.
+  void pullId;
 
   return {
     id: prefix, weekId, dayOfWeek, label: "Strength (D)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("strength", prefix),
+    warmUpExercises: [buildGroupedWarmup("strength", prefix)],
     cooldownExercises: getCooldownExercises("strength", prefix),
   };
 }
 
-/** Session E — Legs + Core */
+/** Session E — Legs + Core (used only in 5-day mode) */
 function buildSessionE(
   weekId: string, dayOfWeek: number, phase: PlanPhase, weekInPhase: number,
   isDeload: boolean, coreId: string,
@@ -456,48 +565,33 @@ function buildSessionE(
   const prefix = `${weekId}_se`;
   const sp = STRENGTH_BY_PHASE[phase] || STRENGTH_BY_PHASE.hypertrophy;
   const reps = getPhaseWaveReps(phase, weekInPhase);
-
   const lsitId = getLsitId(coreId);
-  const lsitPrilepin = getPrilepinHoldProgramming(estimateMaxHold(lsitId));
 
   const exercises: PlannedExercise[] = [
-    makeEx(`${prefix}_sk0`, lsitId, null, "skill",
-      isDeload ? 2 : lsitPrilepin.sets, isDeload ? 5 : lsitPrilepin.holdTime,
-      90, isDeload ? "easy" : "moderate",
-      { holdSeconds: isDeload ? 5 : lsitPrilepin.holdTime, notes: "Compression work — skill first" }),
-    makeEx(`${prefix}_sq`, "legs_01", getName("legs_01"), "main",
-      isDeload ? 2 : sp.sets, isDeload ? 6 : reps, 120, sp.intent),
-    makeEx(`${prefix}_lu`, "acc_lunges", "Bulgarian Split Squats", "volume",
-      isDeload ? 2 : 3, isDeload ? 6 : 10, 90, isDeload ? "easy" : "moderate",
-      { notes: "Per leg" }),
-    makeEx(`${prefix}_core`, coreId, null, "accessory",
-      isDeload ? 2 : 3, isDeload ? 8 : 12, 60, "easy"),
-    makeEx(`${prefix}_calf`, "acc_calf_raises", "Calf Raises", "accessory",
-      isDeload ? 2 : 3, isDeload ? 10 : 20, 45, "easy"),
-  ];
-
-  const warmUp: PlannedExercise[] = [
-    makeWarmup(`${prefix}_wu0`, "Bodyweight Squats", 2, 10, false),
-    makeWarmup(`${prefix}_wu1`, "Hip Circles", 1, 10, false),
-    makeWarmup(`${prefix}_wu2`, "Leg Swings", 1, 10, false),
-    makeWarmup(`${prefix}_wu3`, "Deep Squat Hold", 1, 60, true),
-    makeWarmup(`${prefix}_wu4`, "Wrist Circles", 1, 15, false),
-  ];
-
-  const coolDown: PlannedExercise[] = [
-    makeCooldown(`${prefix}_cd0`, "Quad Stretch", 1, 30),
-    makeCooldown(`${prefix}_cd1`, "Hamstring Stretch", 1, 30),
-    makeCooldown(`${prefix}_cd2`, "Hip Flexor Stretch", 1, 30),
-    makeCooldown(`${prefix}_cd3`, "Pike Stretch", 1, 60),
-    makeCooldown(`${prefix}_cd4`, "Deep Squat Hold", 1, 90),
+    // Slot 2 — skill practice (L-sit submaximal)
+    makeSkillPracticeIso(`${prefix}_sk_p`, lsitId, null, isDeload),
+    // Slot 3 — skill isometric (L-sit, Prilepin)
+    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload),
+    // Slot 4 — complementary (squat, phase-aware)
+    makeEx(`${prefix}_comp`, "legs_01", getName("legs_01"), "complementary",
+      isDeload ? 2 : sp.sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
+      isDeload ? "easy" : sp.intent),
+    // Slot 5 — accessories grouped (lunges + calf raises)
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "acc_lunges", name: "Bulgarian Split Squats", prescription: "10 each leg" },
+      { id: "acc_calf_raises", name: "Calf Raises" },
+    ]),
+    // Slot 6 — core finisher
+    makeEx(`${prefix}_fin`, coreId, null, "finisher",
+      isDeload ? 2 : 3, isDeload ? 8 : 12, 60, isDeload ? "easy" : "moderate"),
   ];
 
   return {
     id: prefix, weekId, dayOfWeek, label: "Legs + Core (E)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: warmUp,
-    cooldownExercises: coolDown,
+    warmUpExercises: [buildGroupedWarmup("strength", prefix)],
+    cooldownExercises: getCooldownExercises("strength", prefix),
   };
 }
 
@@ -515,7 +609,13 @@ function stampWeights(session: PlannedSession, e1rm: E1RMProfile): void {
   for (const ex of session.exercises) {
     const pattern = getPattern(ex.progressionId);
     if (!pattern) continue;
-    if (ex.exerciseRole === "warmup" || ex.exerciseRole === "cooldown" || ex.exerciseRole === "skill") continue;
+    if (
+      ex.exerciseRole === "warmup" ||
+      ex.exerciseRole === "cooldown" ||
+      ex.exerciseRole === "skill" ||
+      ex.exerciseRole === "skill_practice" ||
+      ex.exerciseRole === "skill_isometric"
+    ) continue;
     ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole);
   }
 }

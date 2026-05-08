@@ -104,6 +104,17 @@ export function runSilentAdaptation(
   // Include latest session in the recent set
   const allSessions = [...recentSessions, latestSession];
 
+  // v2.4.1: count skill slots skipped from autoregulation (for the debug log).
+  const latestPlanned = plannedSessions.find(p => p.id === latestSession.plannedSessionId);
+  const skippedSkillCount = latestPlanned
+    ? latestPlanned.exercises.filter(
+        ex => ex.exerciseRole === "skill_practice" || ex.exerciseRole === "skill_isometric"
+      ).length
+    : 0;
+  if (skippedSkillCount > 0) {
+    logs.push(`Skipped ${skippedSkillCount} skill_practice/skill_isometric exercises (no autoregulation in MVP).`);
+  }
+
   // ── Signal 1: Consistent Completion → Advance Progression ──────────────
   const advanceResults = checkConsistentCompletion(
     allSessions,
@@ -262,6 +273,9 @@ function checkExerciseSkipping(
     if (!plannedSession) continue;
 
     for (const plannedEx of plannedSession.exercises) {
+      // v2.4.1: skip the new skill roles. Bodyweight skill work doesn't
+      // autoregulate; "skipping" a skill_practice slot isn't a real signal.
+      if (plannedEx.exerciseRole === "skill_practice" || plannedEx.exerciseRole === "skill_isometric") continue;
       if (!skipCounts[plannedEx.id]) {
         skipCounts[plannedEx.id] = { count: 0, totalAppearances: 0, name: plannedEx.name, progressionId: plannedEx.progressionId };
       }
@@ -628,6 +642,10 @@ function buildExerciseHistory(
     if (!plannedSession) continue;
 
     for (const plannedEx of plannedSession.exercises) {
+      // v2.4.1: skip skill_practice + skill_isometric. Bodyweight skill work
+      // is not autoregulated in MVP — proper progression-only adaptations
+      // for skill_isometric land in v1.5.
+      if (plannedEx.exerciseRole === "skill_practice" || plannedEx.exerciseRole === "skill_isometric") continue;
       if (!history[plannedEx.id]) {
         history[plannedEx.id] = {
           plannedExercise: plannedEx,

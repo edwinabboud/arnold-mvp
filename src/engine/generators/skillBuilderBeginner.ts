@@ -1,8 +1,15 @@
 // =============================================================================
-// ARNOLD — Skill Builder Beginner Plan Generator
-// 12-week full-body A/B/C rotation. Skills FIRST, then supporting strength.
-// Double progression + handstand time accumulation.
-// Deload every 4th week. Wave loading across 3-week blocks.
+// ARNOLD — Skill Builder Beginner Plan Generator (v2.4.1 slim 7-card)
+// 12-week full-body A/B/C rotation. 7-card session structure on screen:
+//   1. Warm-up (grouped — single PlannedExercise w/ subExercises)
+//   2. Skill practice  (slot 2 — submaximal CNS work, never autoregulated)
+//   3. Skill isometric (slot 3 — primary hold, holdSeconds scales by phase)
+//   4. Complementary lift (slot 4)
+//   5. Accessories superset (slot 5 — grouped, 2 movements)
+//   6. Core finisher (slot 6)
+//   7. Cooldown (slot 7 — handled separately, list of stretches)
+// Deload every 4th week. Wave loading on the complementary lift.
+// Spec ref: arnold-product-spec-v2_4 §5.2 + v2.4.1 amendment.
 // =============================================================================
 
 import {
@@ -14,6 +21,7 @@ import {
   PlannedExercise,
   PlannedSession,
   Schedule,
+  SubExercise,
   UserProgression,
 } from "../../types";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
@@ -31,7 +39,7 @@ const BEGINNER_PHASES: Array<{ phase: PlanPhase; weeks: number }> = [
   { phase: "deload", weeks: 1 },
 ];
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers (unchanged from v1.0) ───────────────────────────────────────────
 
 function getActiveProgression(
   pattern: string,
@@ -130,21 +138,65 @@ function getLsitId(coreId: string): string {
   return coreId;
 }
 
-// ── Warm-ups & Cooldowns (Skill-Specific) ───────────────────────────────────
+// ── v2.4.1: Grouped Warm-up Block ───────────────────────────────────────────
 
-function makeWarmup(id: string, name: string, sets: number, reps: number, isIsometric: boolean): PlannedExercise {
+/**
+ * Returns a single PlannedExercise representing the entire warm-up for the
+ * session. Sub-items live in `subExercises`. UI renders this as one card.
+ * Per v2.4.1 amendment: MVP uses existing v1.0 warm-up pools — canonical
+ * 7-drill wrist sequence is deferred to v1.5.
+ */
+function buildGroupedWarmup(
+  sessionType: "push_skill" | "pull_skill" | "legs",
+  weekId: string,
+): PlannedExercise {
+  const subPrefix = `${weekId}_wu`;
+  let subs: SubExercise[];
+
+  switch (sessionType) {
+    case "push_skill":
+      subs = [
+        { id: `${subPrefix}0`, name: "Wrist Circles", prescription: "1 × 15" },
+        { id: `${subPrefix}1`, name: "Wrist Rocks", prescription: "1 × 10" },
+        { id: `${subPrefix}2`, name: "Shoulder Dislocates", prescription: "1 × 15" },
+        { id: `${subPrefix}3`, name: "Scap Push-ups", prescription: "2 × 10" },
+        { id: `${subPrefix}4`, name: "Hollow Body", prescription: "3 × 15s hold" },
+      ];
+      break;
+    case "pull_skill":
+      subs = [
+        { id: `${subPrefix}0`, name: "Band Pull-Aparts", prescription: "2 × 15" },
+        { id: `${subPrefix}1`, name: "Active Hang", prescription: "1 × 30s hold" },
+        { id: `${subPrefix}2`, name: "Scap Pulls", prescription: "2 × 8" },
+        { id: `${subPrefix}3`, name: "Cat-Cow", prescription: "1 × 10" },
+      ];
+      break;
+    case "legs":
+      subs = [
+        { id: `${subPrefix}0`, name: "Arm Circles", prescription: "1 × 20" },
+        { id: `${subPrefix}1`, name: "Jumping Jacks", prescription: "1 × 30" },
+        { id: `${subPrefix}2`, name: "Bodyweight Squats", prescription: "2 × 10" },
+        { id: `${subPrefix}3`, name: "Leg Swings", prescription: "1 × 10 each side" },
+        { id: `${subPrefix}4`, name: "Deep Squat Hold", prescription: "1 × 30s hold" },
+      ];
+      break;
+  }
+
   return {
-    id,
+    id: `${weekId}_warmup`,
     progressionId: "warmup",
-    name,
-    sets,
-    reps,
+    name: "Warm-up",
+    groupLabel: "Warm-up",
+    sets: 1,
+    reps: 0,
     restSeconds: 0,
     difficultyIntent: "easy",
     exerciseRole: "warmup",
-    ...(isIsometric ? { holdSeconds: reps } : {}),
+    subExercises: subs,
   };
 }
+
+// ── Cooldown (unchanged from v1.0) ──────────────────────────────────────────
 
 function makeCooldown(id: string, name: string, sets: number, holdSeconds: number): PlannedExercise {
   return {
@@ -158,35 +210,6 @@ function makeCooldown(id: string, name: string, sets: number, holdSeconds: numbe
     exerciseRole: "cooldown",
     holdSeconds,
   };
-}
-
-function getWarmupExercises(sessionType: "push_skill" | "pull_skill" | "legs", weekId: string): PlannedExercise[] {
-  const prefix = `${weekId}_wu`;
-  switch (sessionType) {
-    case "push_skill":
-      return [
-        makeWarmup(`${prefix}0`, "Wrist Circles", 1, 15, false),
-        makeWarmup(`${prefix}1`, "Wrist Rocks", 1, 10, false),
-        makeWarmup(`${prefix}2`, "Shoulder Dislocates", 1, 15, false),
-        makeWarmup(`${prefix}3`, "Scap Push-ups", 2, 10, false),
-        makeWarmup(`${prefix}4`, "Hollow Body", 3, 15, true),
-      ];
-    case "pull_skill":
-      return [
-        makeWarmup(`${prefix}0`, "Band Pull-Aparts", 2, 15, false),
-        makeWarmup(`${prefix}1`, "Active Hang", 1, 30, true),
-        makeWarmup(`${prefix}2`, "Scap Pulls", 2, 8, false),
-        makeWarmup(`${prefix}3`, "Cat-Cow", 1, 10, false),
-      ];
-    case "legs":
-      return [
-        makeWarmup(`${prefix}0`, "Arm Circles", 1, 20, false),
-        makeWarmup(`${prefix}1`, "Jumping Jacks", 1, 30, false),
-        makeWarmup(`${prefix}2`, "Bodyweight Squats", 2, 10, false),
-        makeWarmup(`${prefix}3`, "Leg Swings", 1, 10, false),
-        makeWarmup(`${prefix}4`, "Deep Squat Hold", 1, 30, true),
-      ];
-  }
 }
 
 function getCooldownExercises(sessionType: "push_skill" | "pull_skill" | "legs", weekId: string): PlannedExercise[] {
@@ -213,13 +236,79 @@ function getCooldownExercises(sessionType: "push_skill" | "pull_skill" | "legs",
   }
 }
 
-// ── Session Builders ────────────────────────────────────────────────────────
+// ── v2.4.1: Skill Isometric Hold Scheme (Slot 3) ────────────────────────────
 
-/** Session A — Push + Skill: L-sit first, then push strength */
+/**
+ * Returns the prescription for the primary skill isometric per the v2.4.1
+ * §5.2 hold tables.
+ *   Weeks 1–4 build:  6 × 5s (mid of 4–6s range)   | deload: 3 × 3s
+ *   Weeks 5–8 build:  5 × 8s (mid of 6–10s range)  | deload: 3 × 5s
+ *   Weeks 9–12 build: 4 × 10s (mid of 8–12s range) | deload: 3 × 6s
+ *   Rest 180s build / 120s deload between sets.
+ */
+function getSkillIsometricScheme(
+  weekNumber: number,
+  isDeload: boolean,
+): { sets: number; holdSeconds: number; restSeconds: number } {
+  const restSeconds = isDeload ? 120 : 180;
+  if (weekNumber <= 4) {
+    return isDeload
+      ? { sets: 3, holdSeconds: 3, restSeconds }
+      : { sets: 6, holdSeconds: 5, restSeconds };
+  }
+  if (weekNumber <= 8) {
+    return isDeload
+      ? { sets: 3, holdSeconds: 5, restSeconds }
+      : { sets: 5, holdSeconds: 8, restSeconds };
+  }
+  return isDeload
+    ? { sets: 3, holdSeconds: 6, restSeconds }
+    : { sets: 4, holdSeconds: 10, restSeconds };
+}
+
+// ── v2.4.1: Accessories Superset Block (Slot 5) ─────────────────────────────
+
+/**
+ * Returns a single grouped PlannedExercise containing two supersetted
+ * accessory movements as subExercises. Sets/reps on the parent represent
+ * rounds × per-movement reps. Inter-superset rest lives in restSeconds;
+ * intra-superset rest is zero (communicated in notes).
+ */
+function buildAccessoryBlock(
+  weekId: string,
+  isDeload: boolean,
+  accessories: Array<{ id: string; name: string }>,
+): PlannedExercise {
+  const rounds = isDeload ? 2 : 3;
+  const reps = isDeload ? 10 : 12;
+  const subs: SubExercise[] = accessories.map((a, i) => ({
+    id: `${weekId}_acc_sub${i}`,
+    name: a.name,
+    prescription: `${reps} reps`,
+  }));
+  return {
+    id: `${weekId}_acc_block`,
+    progressionId: "accessory_block",
+    name: "Accessories (superset)",
+    groupLabel: "Accessories (superset)",
+    sets: rounds,
+    reps,
+    restSeconds: 60,
+    difficultyIntent: "easy",
+    exerciseRole: "accessory",
+    subExercises: subs,
+    notes: "Superset — no rest between movements, 60s between rounds",
+  };
+}
+
+// ── Session Builders (5-entry exercises[] per v2.4.1) ───────────────────────
+
+/** Session A — Push focus. */
 function buildSessionA(
   weekId: string,
   dayOfWeek: number,
   phase: PlanPhase,
+  weekNumber: number,
   pullId: string,
   pushId: string,
   coreId: string,
@@ -227,51 +316,60 @@ function buildSessionA(
   isDeload: boolean,
   waveReps: number,
 ): PlannedSession {
-  const sets = isDeload ? 2 : 3;
-  const diff: DifficultyIntent = isDeload ? "easy" : "challenging";
-  const modDiff: DifficultyIntent = isDeload ? "easy" : "moderate";
+  const prefix = `${weekId}_a`;
   const lsitId = getLsitId(coreId);
+  const iso = getSkillIsometricScheme(weekNumber, isDeload);
 
-  // Dip progression: use push tree, find dips (push_07) or fallback to current push level
+  // Slot 4 complementary: dip variant if user has progressed there, else
+  // a push variant 2 levels below current to avoid duplicating the
+  // dominant push movement of the day.
   const pushTree = getProgressionTree("push");
   const pushIdx = pushTree.findIndex(p => p.id === pushId);
   const dipIdx = pushTree.findIndex(p => p.id === "push_07");
-  // Use dips if user is at that level, otherwise use a push variant 2 below current (no duplicates)
   const dipId = (dipIdx >= 0 && pushIdx >= dipIdx) ? "push_07" : resolveVolume(pushId, 2);
 
   const exercises: PlannedExercise[] = [
-    // Skill FIRST
-    makeExercise(0, weekId, lsitId, null, "skill", sets, isDeload ? 15 : 20, 90, modDiff,
-      { holdSeconds: isDeload ? 15 : 20, notes: "Max hold — stop before failure" }),
-    // Main strength
-    makeExercise(1, weekId, pushId, null, "main", sets, waveReps, 120, diff),
-    makeExercise(2, weekId, dipId, null, "main", sets, waveReps, 120, diff),
-    // Volume
-    makeExercise(3, weekId, "supplementary_pike_pushups", "Pike Push-ups", "volume", sets, isDeload ? 8 : 10, 90, modDiff),
-    // Accessories
-    makeExercise(4, weekId, "supplementary_scap_pushups", "Scapular Push-ups (Protraction)", "accessory", sets, isDeload ? 10 : 12, 60, "easy"),
-    makeExercise(5, weekId, "supplementary_plank", "Plank Hold", "accessory", sets, isDeload ? 30 : 40, 30, "easy",
-      { holdSeconds: isDeload ? 30 : 40 }),
+    // Slot 2 — skill practice
+    makeExercise(0, weekId, lsitId, null, "skill_practice",
+      isDeload ? 1 : 2, 10, 60, "easy",
+      { holdSeconds: 10, notes: "Submaximal — practice technique, stop before failure" }),
+    // Slot 3 — skill isometric
+    makeExercise(1, weekId, lsitId, null, "skill_isometric",
+      iso.sets, iso.holdSeconds, iso.restSeconds, isDeload ? "easy" : "moderate",
+      { holdSeconds: iso.holdSeconds }),
+    // Slot 4 — complementary lift
+    makeExercise(2, weekId, dipId, null, "complementary",
+      isDeload ? 2 : 3, isDeload ? 6 : waveReps, 120, isDeload ? "easy" : "moderate"),
+    // Slot 5 — accessories grouped (skill-adjacent + antagonist)
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "supplementary_scap_pushups", name: "Scapular Push-ups (Protraction)" },
+      { id: "acc_face_pulls", name: "Face Pulls (Band)" },
+    ]),
+    // Slot 6 — core finisher
+    makeExercise(4, weekId, "core_02", "Hollow Body Hold", "finisher",
+      isDeload ? 2 : 3, isDeload ? 20 : 30, 60, isDeload ? "easy" : "moderate",
+      { holdSeconds: isDeload ? 20 : 30 }),
   ];
 
   return {
-    id: `${weekId}_a`,
+    id: prefix,
     weekId,
     dayOfWeek,
     label: "Push + Skill (A)",
     phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("push_skill", `${weekId}_a`),
-    cooldownExercises: getCooldownExercises("push_skill", `${weekId}_a`),
+    warmUpExercises: [buildGroupedWarmup("push_skill", prefix)],
+    cooldownExercises: getCooldownExercises("push_skill", prefix),
   };
 }
 
-/** Session B — Pull + Skill: Skin the Cat first, then pull strength */
+/** Session B — Pull focus. */
 function buildSessionB(
   weekId: string,
   dayOfWeek: number,
   phase: PlanPhase,
+  weekNumber: number,
   pullId: string,
   _pushId: string,
   _coreId: string,
@@ -279,83 +377,99 @@ function buildSessionB(
   isDeload: boolean,
   waveReps: number,
 ): PlannedSession {
-  const sets = isDeload ? 2 : 3;
-  const diff: DifficultyIntent = isDeload ? "easy" : "challenging";
-  const modDiff: DifficultyIntent = isDeload ? "easy" : "moderate";
+  const prefix = `${weekId}_b`;
+  const iso = getSkillIsometricScheme(weekNumber, isDeload);
 
-  // Row: use pull tree 2 levels below, substitute accessory if duplicate
+  // Slot 4 complementary: pull/row variant 2 levels below current.
   const rowId = resolveVolume(pullId, 2);
 
   const exercises: PlannedExercise[] = [
-    // Skill FIRST
-    makeExercise(0, weekId, "skill_skin_the_cat", "Skin the Cat", "skill", sets, isDeload ? 3 : 5, 120, modDiff,
-      { notes: "Slow and controlled — stop before failure" }),
-    // Main strength
-    makeExercise(1, weekId, pullId, null, "main", sets, waveReps, 120, diff),
-    // Volume
-    makeExercise(2, weekId, rowId, null, "volume", sets, isDeload ? 8 : 10, 90, modDiff),
-    makeExercise(3, weekId, "supplementary_active_hang", "Dead Hang (Active Shoulders)", "volume", sets, isDeload ? 20 : 30, 60, modDiff,
+    // Slot 2 — skill practice (Skin the Cat — dynamic, reps-based not hold)
+    makeExercise(0, weekId, "skill_skin_the_cat", "Skin the Cat", "skill_practice",
+      isDeload ? 1 : 2, 3, 60, "easy",
+      { notes: "Submaximal — practice technique, stop before failure" }),
+    // Slot 3 — skill isometric (Active Hang — pull-side hold)
+    makeExercise(1, weekId, "supplementary_active_hang", "Dead Hang (Active Shoulders)",
+      "skill_isometric", iso.sets, iso.holdSeconds, iso.restSeconds,
+      isDeload ? "easy" : "moderate",
+      { holdSeconds: iso.holdSeconds }),
+    // Slot 4 — complementary lift
+    makeExercise(2, weekId, rowId, null, "complementary",
+      isDeload ? 2 : 3, isDeload ? 6 : waveReps, 120, isDeload ? "easy" : "moderate"),
+    // Slot 5 — accessories grouped (skill-adjacent + antagonist)
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "acc_face_pulls", name: "Face Pulls (Band)" },
+      { id: "supplementary_scap_pushups", name: "Scapular Push-ups (Protraction)" },
+    ]),
+    // Slot 6 — core finisher (plank hold)
+    makeExercise(4, weekId, "supplementary_plank", "Plank Hold", "finisher",
+      isDeload ? 2 : 3, isDeload ? 20 : 30, 60, isDeload ? "easy" : "moderate",
       { holdSeconds: isDeload ? 20 : 30 }),
-    // Accessories
-    makeExercise(4, weekId, "core_02", null, "accessory", sets, isDeload ? 15 : 25, 60, "easy",
-      { holdSeconds: isDeload ? 15 : 25 }),
-    makeExercise(5, weekId, "acc_face_pulls", null, "accessory", sets, 15, 60, "easy"),
   ];
 
   return {
-    id: `${weekId}_b`,
+    id: prefix,
     weekId,
     dayOfWeek,
     label: "Pull + Skill (B)",
     phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("pull_skill", `${weekId}_b`),
-    cooldownExercises: getCooldownExercises("pull_skill", `${weekId}_b`),
+    warmUpExercises: [buildGroupedWarmup("pull_skill", prefix)],
+    cooldownExercises: getCooldownExercises("pull_skill", prefix),
   };
 }
 
-/** Session C — Full Body + Legs: L-sit first, then full body strength */
+/** Session C — Full body / Legs focus. */
 function buildSessionC(
   weekId: string,
   dayOfWeek: number,
   phase: PlanPhase,
-  pullId: string,
-  pushId: string,
+  weekNumber: number,
+  _pullId: string,
+  _pushId: string,
   coreId: string,
   legsId: string,
   isDeload: boolean,
   waveReps: number,
 ): PlannedSession {
-  const sets = isDeload ? 2 : 3;
-  const diff: DifficultyIntent = isDeload ? "easy" : "challenging";
-  const modDiff: DifficultyIntent = isDeload ? "easy" : "moderate";
+  const prefix = `${weekId}_c`;
   const lsitId = getLsitId(coreId);
+  const iso = getSkillIsometricScheme(weekNumber, isDeload);
 
   const exercises: PlannedExercise[] = [
-    // Skill FIRST
-    makeExercise(0, weekId, lsitId, null, "skill", sets, isDeload ? 15 : 20, 90, modDiff,
-      { holdSeconds: isDeload ? 15 : 20, notes: "Max hold — stop before failure" }),
-    // Main strength
-    makeExercise(1, weekId, legsId, null, "main", sets, waveReps, 120, diff),
-    makeExercise(2, weekId, pullId, null, "main", sets, waveReps, 120, diff),
-    makeExercise(3, weekId, pushId, null, "main", sets, waveReps, 90, modDiff),
-    // Accessories
-    makeExercise(4, weekId, "acc_lunges", null, "accessory", sets, 10, 60, "easy"),
-    makeExercise(5, weekId, "core_01", null, "accessory", sets, 10, 60, "easy",
-      { notes: "10 per side" }),
+    // Slot 2 — skill practice
+    makeExercise(0, weekId, lsitId, null, "skill_practice",
+      isDeload ? 1 : 2, 10, 60, "easy",
+      { holdSeconds: 10, notes: "Submaximal — practice technique, stop before failure" }),
+    // Slot 3 — skill isometric
+    makeExercise(1, weekId, lsitId, null, "skill_isometric",
+      iso.sets, iso.holdSeconds, iso.restSeconds, isDeload ? "easy" : "moderate",
+      { holdSeconds: iso.holdSeconds }),
+    // Slot 4 — complementary lift (legs progression directly)
+    makeExercise(2, weekId, legsId, null, "complementary",
+      isDeload ? 2 : 3, isDeload ? 6 : waveReps, 120, isDeload ? "easy" : "moderate"),
+    // Slot 5 — accessories grouped (legs + core)
+    buildAccessoryBlock(prefix, isDeload, [
+      { id: "acc_lunges", name: "Lunges" },
+      { id: "supplementary_plank", name: "Plank Hold" },
+    ]),
+    // Slot 6 — core finisher (max-effort L-sit attempt)
+    makeExercise(4, weekId, lsitId, null, "finisher",
+      isDeload ? 2 : 3, isDeload ? 20 : 30, 60, isDeload ? "easy" : "moderate",
+      { holdSeconds: isDeload ? 20 : 30, notes: "Max effort — go close to failure" }),
   ];
 
   return {
-    id: `${weekId}_c`,
+    id: prefix,
     weekId,
     dayOfWeek,
     label: "Full Body + Legs (C)",
     phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: getWarmupExercises("legs", `${weekId}_c`),
-    cooldownExercises: getCooldownExercises("legs", `${weekId}_c`),
+    warmUpExercises: [buildGroupedWarmup("legs", prefix)],
+    cooldownExercises: getCooldownExercises("legs", prefix),
   };
 }
 
@@ -388,7 +502,7 @@ export function generateSkillBuilderBeginner(
       const isDeload = block.phase === "deload";
 
       const weekInBlock = isDeload ? 0 : w;
-      const waveReps = isDeload ? 5 : getWaveReps(weekInBlock, 5, 8);
+      const waveReps = isDeload ? 6 : getWaveReps(weekInBlock, 6, 10);
 
       const sessions: PlannedSession[] = [];
       const days = schedule.preferredDays.slice(0, sessionsPerWeek);
@@ -402,6 +516,7 @@ export function generateSkillBuilderBeginner(
             weekId,
             days[s],
             block.phase,
+            weekNumber,
             pullId,
             pushId,
             coreId,

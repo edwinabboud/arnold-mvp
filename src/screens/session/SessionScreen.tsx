@@ -97,6 +97,73 @@ const timerStyles = StyleSheet.create({
 
 // ── Exercise Card ───────────────────────────────────────────────────────────
 
+/**
+ * v2.4.1 grouped card — used for warm-up blocks and accessory supersets.
+ * The whole block is one logical step; sub-items are display-only with no
+ * per-set tracking. Active session advances on a single DONE tap.
+ */
+function GroupedExerciseCard({
+  exercise,
+  isCurrent,
+  isDone,
+  isFuture,
+  onTapDetail,
+}: {
+  exercise: PlannedExercise;
+  isCurrent: boolean;
+  isDone: boolean;
+  isFuture: boolean;
+  onTapDetail: () => void;
+}) {
+  const subs = exercise.subExercises ?? [];
+  return (
+    <TouchableOpacity
+      style={[
+        cardStyles.card,
+        isCurrent && cardStyles.cardCurrent,
+        isDone && cardStyles.cardDone,
+        isFuture && cardStyles.cardFuture,
+      ]}
+      onPress={onTapDetail}
+      activeOpacity={0.8}
+    >
+      <View style={cardStyles.groupHeader}>
+        <View style={cardStyles.nameRow}>
+          {isDone && <Text style={cardStyles.checkmark}>✓</Text>}
+          <Text
+            style={[
+              cardStyles.name,
+              isDone && cardStyles.nameDone,
+              isCurrent && cardStyles.nameCurrent,
+              isFuture && cardStyles.nameFuture,
+            ]}
+          >
+            {exercise.groupLabel ?? exercise.name}
+          </Text>
+        </View>
+        {exercise.notes && (
+          <Text style={cardStyles.noteText}>{exercise.notes}</Text>
+        )}
+      </View>
+      {subs.map((sub, i) => (
+        <View
+          key={sub.id}
+          style={[
+            cardStyles.groupSubRow,
+            i === subs.length - 1 && cardStyles.groupSubRowLast,
+          ]}
+        >
+          <Text style={cardStyles.groupSubName}>{sub.name}</Text>
+          <Text style={cardStyles.groupSubPrescription}>{sub.prescription}</Text>
+          {sub.notes && (
+            <Text style={cardStyles.groupSubNotes}>{sub.notes}</Text>
+          )}
+        </View>
+      ))}
+    </TouchableOpacity>
+  );
+}
+
 function ExerciseCard({
   exercise,
   isCurrent,
@@ -146,7 +213,9 @@ function ExerciseCard({
             </Text>
           )}
           <Text style={[cardStyles.meta, isCurrent && cardStyles.metaCurrent, isDone && { opacity: 0.4 }]}>
-            {exercise.sets} sets × {progression?.isIsometric ? `${exercise.reps}s hold` : `${exercise.reps} reps`}
+            {exercise.sets} sets × {(progression?.isIsometric || exercise.exerciseRole === "skill_isometric")
+              ? `${exercise.holdSeconds ?? exercise.reps}s hold`
+              : `${exercise.reps} reps`}
             {isCurrent && ` · ${exercise.restSeconds}s rest`}
           </Text>
         </View>
@@ -281,6 +350,41 @@ const cardStyles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 18,
   },
+  // v2.4.1 grouped card (warm-up, accessories superset)
+  groupHeader: {
+    marginBottom: spacing.sm,
+  },
+  groupSubRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  groupSubRowLast: {
+    borderBottomWidth: 0,
+  },
+  groupSubName: {
+    fontSize: 15,
+    color: colors.text,
+    fontWeight: "500",
+    flex: 1,
+  },
+  groupSubPrescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: "400",
+    marginLeft: spacing.md,
+  },
+  groupSubNotes: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    marginTop: 2,
+    flexBasis: "100%",
+  },
 });
 
 // ── Full Workout Modal ──────────────────────────────────────────────────────
@@ -293,8 +397,10 @@ interface FullWorkoutModalProps {
 }
 
 function ExerciseRow({ exercise, showRest }: { exercise: PlannedExercise; showRest: boolean }) {
-  const isIso = PROGRESSIONS.find(p => p.id === exercise.progressionId)?.isIsometric;
-  const repsLabel = isIso ? `${exercise.reps}s hold` : `${exercise.reps}`;
+  const isIso = PROGRESSIONS.find(p => p.id === exercise.progressionId)?.isIsometric
+    || exercise.exerciseRole === "skill_isometric";
+  const holdValue = exercise.holdSeconds ?? exercise.reps;
+  const repsLabel = isIso ? `${holdValue}s hold` : `${exercise.reps}`;
   const setsReps = `${exercise.sets}×${repsLabel}`;
   const weight = exercise.addedWeightKg && exercise.addedWeightKg > 0 ? `+${exercise.addedWeightKg}kg` : null;
 
@@ -521,22 +627,27 @@ export default function SessionScreen({ navigation, route }: any) {
 
   // DONE button handler
   const handleDone = () => {
-    const isLastSet = currentSetIdx >= currentEx.sets - 1;
+    // v2.4.1 grouped cards (warm-up, accessory superset): one DONE press
+    // advances the whole block. Sub-items aren't individually tracked.
+    const isGrouped = !!(currentEx?.subExercises && currentEx.subExercises.length > 0);
+    const isLastSet = isGrouped ? true : currentSetIdx >= currentEx.sets - 1;
     const isLastExercise = currentExIdx >= currentPhaseExercises.length - 1;
 
-    // Log the set.
+    // Log the set (skip for grouped cards — sub-items aren't tracked).
     // perceivedDifficulty is NOT set here — it's user feedback, not planner
     // intent. It gets populated from the end-of-session review (or mid-session
     // chat). If the user skips review, it stays undefined and autoregulation
     // won't fire for that exercise.
-    const completed: CompletedSet = {
-      exerciseId: currentEx.id,
-      setNumber: currentSetIdx,
-      repsCompleted: currentEx.reps,
-      addedWeightKg: currentEx.addedWeightKg,
-      timestamp: new Date().toISOString(),
-    };
-    logSet(completed);
+    if (!isGrouped) {
+      const completed: CompletedSet = {
+        exerciseId: currentEx.id,
+        setNumber: currentSetIdx,
+        repsCompleted: currentEx.reps,
+        addedWeightKg: currentEx.addedWeightKg,
+        timestamp: new Date().toISOString(),
+      };
+      logSet(completed);
+    }
 
     if (isLastSet && isLastExercise) {
       // End of current phase — transition to next
@@ -774,25 +885,41 @@ export default function SessionScreen({ navigation, route }: any) {
             )}
 
             {/* Exercise cards for current phase */}
-            {currentPhaseExercises.map((ex, i) => (
-              <View
-                key={ex.id}
-                onLayout={(e) => {
-                  exerciseLayouts.current[i] = {
-                    y: e.nativeEvent.layout.y,
-                    height: e.nativeEvent.layout.height,
-                  };
-                }}
-              >
-                <ExerciseCard
-                  exercise={ex}
-                  isCurrent={i === currentExIdx}
-                  isDone={i < currentExIdx}
-                  currentSet={i === currentExIdx ? currentSetIdx : 0}
-                  onTapDetail={() => setDetailExercise(ex.progressionId)}
-                />
-              </View>
-            ))}
+            {currentPhaseExercises.map((ex, i) => {
+              const isCurrent = i === currentExIdx;
+              const isDone = i < currentExIdx;
+              const isFuture = i > currentExIdx;
+              const isGrouped = !!(ex.subExercises && ex.subExercises.length > 0);
+              return (
+                <View
+                  key={ex.id}
+                  onLayout={(e) => {
+                    exerciseLayouts.current[i] = {
+                      y: e.nativeEvent.layout.y,
+                      height: e.nativeEvent.layout.height,
+                    };
+                  }}
+                >
+                  {isGrouped ? (
+                    <GroupedExerciseCard
+                      exercise={ex}
+                      isCurrent={isCurrent}
+                      isDone={isDone}
+                      isFuture={isFuture}
+                      onTapDetail={() => setDetailExercise(ex.progressionId)}
+                    />
+                  ) : (
+                    <ExerciseCard
+                      exercise={ex}
+                      isCurrent={isCurrent}
+                      isDone={isDone}
+                      currentSet={isCurrent ? currentSetIdx : 0}
+                      onTapDetail={() => setDetailExercise(ex.progressionId)}
+                    />
+                  )}
+                </View>
+              );
+            })}
           </>
         )}
       </ScrollView>
@@ -808,8 +935,9 @@ export default function SessionScreen({ navigation, route }: any) {
               </Text>
               <Text style={styles.restingNext}>
                 Next: Set {currentSetIdx + 1} of {currentEx.sets} ·{" "}
-                {PROGRESSIONS.find((p) => p.id === currentEx.progressionId)?.isIsometric
-                  ? `${currentEx.reps}s hold`
+                {(PROGRESSIONS.find((p) => p.id === currentEx.progressionId)?.isIsometric
+                  || currentEx.exerciseRole === "skill_isometric")
+                  ? `${currentEx.holdSeconds ?? currentEx.reps}s hold`
                   : `${currentEx.reps} reps`}
               </Text>
               <View style={styles.controlRow}>
@@ -844,8 +972,9 @@ export default function SessionScreen({ navigation, route }: any) {
             <>
               <Text style={styles.setInfo}>
                 Set {currentSetIdx + 1} of {currentEx.sets} ·{" "}
-                {PROGRESSIONS.find((p) => p.id === currentEx.progressionId)?.isIsometric
-                  ? `${currentEx.reps}s hold`
+                {(PROGRESSIONS.find((p) => p.id === currentEx.progressionId)?.isIsometric
+                  || currentEx.exerciseRole === "skill_isometric")
+                  ? `${currentEx.holdSeconds ?? currentEx.reps}s hold`
                   : `${currentEx.reps} reps`}
                 {currentEx.addedWeightKg != null && currentEx.addedWeightKg > 0
                   ? ` · +${currentEx.addedWeightKg}kg`
