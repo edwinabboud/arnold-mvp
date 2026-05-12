@@ -24,6 +24,7 @@ import ConversationalOnboarding from "../screens/onboarding/ConversationalOnboar
 import HomeScreen from "../screens/home/HomeScreen";
 import SessionScreen from "../screens/session/SessionScreen";
 import ProgressScreen from "../screens/progress/ProgressScreen";
+import SettingsScreen from "../screens/settings/SettingsScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -85,6 +86,7 @@ function MainStack() {
         component={SessionScreen}
         options={{ animation: "slide_from_bottom", gestureEnabled: false }}
       />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
     </Stack.Navigator>
   );
 }

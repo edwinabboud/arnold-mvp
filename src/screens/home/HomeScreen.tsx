@@ -292,10 +292,21 @@ export default function HomeScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>
-            {sessionInfo?.isToday ? "Ready to train" : "Rest & recover"}
-          </Text>
-          <Text style={styles.title}>Arnold</Text>
+          <View style={styles.headerTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.greeting}>
+                {sessionInfo?.isToday ? "Ready to train" : "Rest & recover"}
+              </Text>
+              <Text style={styles.title}>Arnold</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => navigation.getParent()?.navigate("Settings")}
+              hitSlop={12}
+              style={styles.gearButton}
+            >
+              <Text style={styles.gearIcon}>⚙</Text>
+            </TouchableOpacity>
+          </View>
           {__DEV__ && (
             <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
               <TouchableOpacity onPress={handleDevReset} style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 4 }}>
@@ -640,6 +651,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
     paddingBottom: spacing.md,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  gearButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gearIcon: {
+    fontSize: 24,
+    color: colors.textSecondary,
   },
   greeting: {
     fontSize: typography.sizes.sm,

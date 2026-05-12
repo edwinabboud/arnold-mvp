@@ -41,6 +41,7 @@ import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptation
 // API key removed from client — all Anthropic calls go through the Supabase proxy.
 // The proxy validates the user's JWT and adds the API key server-side.
 const PROXY_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-proxy";
+const DELETE_ACCOUNT_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-delete-account";
 const DEFAULT_MODEL = "claude-3-haiku-20240307";
 const CONVERSATION_MODEL = "claude-sonnet-4-20250514";
 const MAX_TOKENS = 500;
@@ -514,4 +515,32 @@ function buildMessage(
     text: message,
     options,
   };
+}
+
+/**
+ * Permanently deletes the current user's account on the server.
+ * Calls the arnold-delete-account Edge Function which removes the auth user
+ * (cascade FKs wipe profiles/mesocycles/session_logs/streaks/user_progressions).
+ * Throws on any failure — caller decides whether to clear local state.
+ * Required by Apple guideline 5.1.1(v).
+ */
+export async function deleteAccount(): Promise<void> {
+  const token = await getAuthToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const response = await fetch(DELETE_ACCOUNT_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error("[ARNOLD] Account deletion failed:", response.status, errorBody);
+    throw new Error(`Deletion failed: ${response.status}`);
+  }
+
+  console.log("[ARNOLD] Account deleted on server");
 }

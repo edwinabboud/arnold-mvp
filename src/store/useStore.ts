@@ -123,6 +123,10 @@ interface ArnoldStore {
 
   // Full reset
   resetStore: () => void;
+  /** Wipes all in-memory store state for account deletion. Same as resetStore;
+   *  named separately so the call site reads intent. AsyncStorage clearing and
+   *  Supabase sign-out are handled by the caller (DeleteAccountDialog). */
+  resetForAccountDeletion: () => void;
 }
 
 const initialOnboarding: OnboardingState = {
@@ -640,6 +644,21 @@ export const useStore = create<ArnoldStore>()(
       clearAdaptationQueue: () => set({ adaptationQueue: createEmptyQueue() }),
 
       resetStore: () => {
+        set({
+          profile: null,
+          onboarding: initialOnboarding,
+          activeMesocycle: null,
+          userProgressions: [],
+          activeSession: null,
+          sessionHistory: [],
+          streaks: initialStreaks,
+          lastStreakCheckWeek: null,
+          weeklyDrops: {},
+          adaptationQueue: createEmptyQueue(),
+          lastAppliedAdjustments: [],
+        });
+      },
+      resetForAccountDeletion: () => {
         set({
           profile: null,
           onboarding: initialOnboarding,
