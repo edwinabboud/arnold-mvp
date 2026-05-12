@@ -16,7 +16,69 @@ export default {
     },
     ios: {
       supportsTablet: false,
-      bundleIdentifier: "com.arnold.coach"
+      bundleIdentifier: "com.arnold.coach",
+      // Privacy manifest — mirrors PrivacyInfo.xcprivacy at project root.
+      // EAS Build embeds this into the iOS bundle. Required by Apple since iOS 17.
+      privacyManifests: {
+        NSPrivacyAccessedAPITypes: [
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryUserDefaults",
+            NSPrivacyAccessedAPITypeReasons: ["CA92.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryFileTimestamp",
+            NSPrivacyAccessedAPITypeReasons: ["C617.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategorySystemBootTime",
+            NSPrivacyAccessedAPITypeReasons: ["35F9.1"],
+          },
+          {
+            NSPrivacyAccessedAPIType: "NSPrivacyAccessedAPICategoryDiskSpace",
+            NSPrivacyAccessedAPITypeReasons: ["E174.1"],
+          },
+        ],
+        NSPrivacyCollectedDataTypes: [
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeEmailAddress",
+            NSPrivacyCollectedDataTypeLinked: true,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+          },
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeName",
+            NSPrivacyCollectedDataTypeLinked: true,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+          },
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeUserID",
+            NSPrivacyCollectedDataTypeLinked: true,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+          },
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeProductInteraction",
+            NSPrivacyCollectedDataTypeLinked: true,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+              "NSPrivacyCollectedDataTypePurposeAnalytics",
+            ],
+          },
+          {
+            NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeOtherUsageData",
+            NSPrivacyCollectedDataTypeLinked: true,
+            NSPrivacyCollectedDataTypeTracking: false,
+            NSPrivacyCollectedDataTypePurposes: [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+              "NSPrivacyCollectedDataTypePurposeAnalytics",
+            ],
+          },
+        ],
+        NSPrivacyTracking: false,
+        NSPrivacyTrackingDomains: [],
+      },
     },
     android: {
       package: "com.arnold.coach",
