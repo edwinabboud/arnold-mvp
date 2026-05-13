@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { colors } from "../../theme";
 import type { UserBenchmarks, FrontLeverLevel, PlancheLevel } from "../../types";
+import { isDevUser } from "../../config/devAccess";
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -273,16 +274,16 @@ const isValidNumber = (s: string): boolean => {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function BenchmarkInput({ programPath, onComplete, onBack }: BenchmarkInputProps) {
-  const [step, setStep] = useState<"filter" | number>(__DEV__ ? 0 : "filter");
+  const [step, setStep] = useState<"filter" | number>(__DEV__ || isDevUser() ? 0 : "filter");
 
   // All numeric state is string — parsed only on final submit
   const [repsValues, setRepsValues] = useState<Record<string, string>>(
-    __DEV__
+    (__DEV__ || isDevUser())
       ? { pullups: "2", dips: "1", squat: "50" }
       : {}
   );
   const [weightValues, setWeightValues] = useState<Record<string, string>>(
-    __DEV__
+    (__DEV__ || isDevUser())
       ? { pullups: "32.5", dips: "66", squat: "0" }
       : {}
   );

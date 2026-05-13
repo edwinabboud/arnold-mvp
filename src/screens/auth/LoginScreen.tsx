@@ -14,10 +14,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../config/supabase";
+import { isDevUser } from "../../config/devAccess";
 
 export default function LoginScreen({ navigation }: any) {
-  const [email, setEmail] = useState(__DEV__ ? "edwinabboudblanco@gmail.com" : "");
-  const [password, setPassword] = useState(__DEV__ ? "helloworld" : "");
+  const [email, setEmail] = useState(__DEV__ || isDevUser() ? "edwinabboudblanco@gmail.com" : "");
+  const [password, setPassword] = useState(__DEV__ || isDevUser() ? "helloworld" : "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [emailFocused, setEmailFocused] = useState(false);
@@ -25,7 +26,7 @@ export default function LoginScreen({ navigation }: any) {
 
   // Auto-login in dev mode
   useEffect(() => {
-    if (__DEV__ && email && password) {
+    if ((__DEV__ || isDevUser()) && email && password) {
       handleSignIn();
     }
   }, []);

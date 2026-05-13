@@ -529,7 +529,7 @@ export default function SessionScreen({ navigation, route }: any) {
   const [speaking, setSpeaking] = useState(false);
   const [arnoldMsg, setArnoldMsg] = useState("Let's get after it.");
   const [chatOpen, setChatOpen] = useState(false);
-  const [detailExercise, setDetailExercise] = useState<string | null>(null);
+  const [detailExercise, setDetailExercise] = useState<{ section: "warmUp" | "main" | "cooldown"; index: number } | null>(null);
   const [sessionPhase, setSessionPhase] = useState<"warmup" | "training" | "cooldown">("warmup");
   const [sessionComplete, setSessionComplete] = useState(false);
   const [reviewInitiated, setReviewInitiated] = useState(false);
@@ -906,7 +906,10 @@ export default function SessionScreen({ navigation, route }: any) {
                       isCurrent={isCurrent}
                       isDone={isDone}
                       isFuture={isFuture}
-                      onTapDetail={() => setDetailExercise(ex.progressionId)}
+                      onTapDetail={() => setDetailExercise({
+                        section: sessionPhase === "warmup" ? "warmUp" : sessionPhase === "training" ? "main" : "cooldown",
+                        index: i,
+                      })}
                     />
                   ) : (
                     <ExerciseCard
@@ -914,7 +917,10 @@ export default function SessionScreen({ navigation, route }: any) {
                       isCurrent={isCurrent}
                       isDone={isDone}
                       currentSet={isCurrent ? currentSetIdx : 0}
-                      onTapDetail={() => setDetailExercise(ex.progressionId)}
+                      onTapDetail={() => setDetailExercise({
+                        section: sessionPhase === "warmup" ? "warmUp" : sessionPhase === "training" ? "main" : "cooldown",
+                        index: i,
+                      })}
                     />
                   )}
                 </View>
@@ -1027,15 +1033,20 @@ export default function SessionScreen({ navigation, route }: any) {
       {/* Exercise Detail Modal */}
       <Modal visible={detailExercise !== null} animationType="slide">
         {detailExercise && (() => {
-          const detailEx = [...warmUpExercises, ...mainExercises, ...cooldownExercises].find(e => e.progressionId === detailExercise);
+          const sourceArray =
+            detailExercise.section === "warmUp" ? warmUpExercises :
+            detailExercise.section === "main" ? mainExercises :
+            cooldownExercises;
+          const detailEx = sourceArray[detailExercise.index];
+          if (!detailEx) return null;
           return (
             <ExerciseDetail
-              progressionId={detailExercise}
+              progressionId={detailEx.progressionId}
               onClose={() => setDetailExercise(null)}
               isNew={false}
-              sessionContext={detailEx?.notes}
-              exerciseName={detailEx?.name}
-              exerciseNotes={detailEx?.notes}
+              sessionContext={detailEx.notes}
+              exerciseName={detailEx.name}
+              exerciseNotes={detailEx.notes}
             />
           );
         })()}

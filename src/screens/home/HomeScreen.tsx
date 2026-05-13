@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -17,6 +18,7 @@ import { colors, typography, spacing, radius } from "../../theme";
 import { findCurrentSession, getCascadeCandidate, getSessionSummary, getWeekSessions } from "../../utils/sessionFinder";
 import { PlannedSession } from "../../types";
 import { supabase } from "../../config/supabase";
+import { isDevUser } from "../../config/devAccess";
 
 const formatPathName = (path: string): string => {
   switch (path) {
@@ -99,7 +101,7 @@ export default function HomeScreen({ navigation }: any) {
   // DEV-only: force the cascade pill to render so devs can verify the UI
   // without waiting for a real calendar miss. Real cascade still works
   // through baseSessionInfo's cascadedFromDayLabel (set by findCurrentSession).
-  const sessionInfo = (__DEV__ && forceCascade && baseSessionInfo && !overrideSession && !cascadeUndone)
+  const sessionInfo = ((__DEV__ || isDevUser()) && forceCascade && baseSessionInfo && !overrideSession && !cascadeUndone)
     ? { ...baseSessionInfo, cascadedFromDayLabel: baseSessionInfo.cascadedFromDayLabel ?? "earlier this week" }
     : baseSessionInfo;
 
@@ -109,37 +111,46 @@ export default function HomeScreen({ navigation }: any) {
     navigation.getParent()?.navigate("Session");
   };
 
-  const handleDevReset = async () => {
-    try {
-      const { data: { session: s } } = await supabase.auth.getSession();
-      const userId = s?.user?.id;
+  const handleDevReset = () => {
+    Alert.alert(
+      "Reset all state?",
+      "This destroys your training history, profile, and progressions. Cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const { data: { session: s } } = await supabase.auth.getSession();
+              const userId = s?.user?.id;
 
-      if (userId) {
-        await Promise.all([
-          supabase.from('session_logs').delete().eq('user_id', userId),
-          supabase.from('mesocycles').delete().eq('user_id', userId),
-          supabase.from('user_progressions').delete().eq('user_id', userId),
-          supabase.from('streaks').delete().eq('user_id', userId),
-          supabase.from('profiles').update({
-            onboarding_complete: false,
-            assessment_complete: false,
-          }).eq('id', userId),
-        ]);
-        console.log('[ARNOLD] Supabase data wiped for user:', userId);
-      }
+              if (userId) {
+                await Promise.all([
+                  supabase.from('session_logs').delete().eq('user_id', userId),
+                  supabase.from('mesocycles').delete().eq('user_id', userId),
+                  supabase.from('user_progressions').delete().eq('user_id', userId),
+                  supabase.from('streaks').delete().eq('user_id', userId),
+                  supabase.from('profiles').update({
+                    onboarding_complete: false,
+                    assessment_complete: false,
+                  }).eq('id', userId),
+                ]);
+                console.log('[ARNOLD] Supabase data wiped for user:', userId);
+              }
 
-      await AsyncStorage.clear();
-      console.log('[ARNOLD] AsyncStorage cleared');
+              await AsyncStorage.clear();
+              console.log('[ARNOLD] AsyncStorage cleared');
 
-      useStore.getState().resetStore();
-      console.log('[ARNOLD] Zustand store reset');
-
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.warn('[ARNOLD] Dev reset error:', e);
-      await AsyncStorage.clear();
-      await supabase.auth.signOut();
-    }
+              useStore.getState().resetStore();
+              console.log('[ARNOLD] Zustand store reset');
+            } catch (err) {
+              console.error('[ARNOLD] DEV RESET failed:', err);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // DEV-only: simulate a full session with a chosen difficulty for every set.
@@ -307,7 +318,7 @@ export default function HomeScreen({ navigation }: any) {
               <Text style={styles.gearIcon}>⚙</Text>
             </TouchableOpacity>
           </View>
-          {__DEV__ && (
+          {(__DEV__ || isDevUser()) && (
             <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
               <TouchableOpacity onPress={handleDevReset} style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 4 }}>
                 <Text style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>DEV RESET</Text>
@@ -324,7 +335,7 @@ export default function HomeScreen({ navigation }: any) {
           )}
         </View>
 
-        {__DEV__ && debugOpen && (
+        {(__DEV__ || isDevUser()) && debugOpen && (
           <View style={debugStyles.panel}>
             <Text style={debugStyles.heading}>Autoregulation Loop</Text>
 

@@ -17,6 +17,7 @@ import {
   Animated,
   StyleSheet,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatMessage, ChatOption } from "../../types/logging";
 import { colors, typography, spacing, radius } from "../../theme";
 
@@ -189,6 +190,7 @@ export default function ChatWidget({
   const [input, setInput] = useState("");
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   // Animate open/close
   useEffect(() => {
@@ -229,6 +231,7 @@ export default function ChatWidget({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
         style={styles.keyboardView}
       >
         {/* Header */}

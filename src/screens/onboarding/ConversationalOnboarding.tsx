@@ -33,6 +33,7 @@ import { generateHybridAthleteIntermediate } from "../../engine/generators/hybri
 import BenchmarkInput from "./BenchmarkInput";
 import { assignTier } from "../../engine/tierAssignment";
 import type { UserBenchmarks } from "../../types";
+import { isDevUser } from "../../config/devAccess";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -202,8 +203,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
   
   // Step 1 - About You
   const [useMetric, setUseMetric] = useState(true);
-  const [userWeight, setUserWeight] = useState(__DEV__ ? "70" : "");
-  const [userHeight, setUserHeight] = useState(__DEV__ ? "170" : "");
+  const [userWeight, setUserWeight] = useState(__DEV__ || isDevUser() ? "70" : "");
+  const [userHeight, setUserHeight] = useState(__DEV__ || isDevUser() ? "170" : "");
   
   // Step 2 - Program Path Selection
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -465,7 +466,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
             <PrimaryButton label="Get started" onPress={() => goToStep(1)} />
             
             {/* Dev skip button — only visible in development builds */}
-            {__DEV__ && (
+            {(__DEV__ || isDevUser()) && (
               <TouchableOpacity style={styles.devSkipButton} onPress={skipToHome}>
                 <Text style={styles.devSkipText}>Skip to app (dev)</Text>
               </TouchableOpacity>
