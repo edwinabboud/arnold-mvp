@@ -172,6 +172,8 @@ export interface PlannedExercise {
   rpeTarget?: number;
   /** Hold time in seconds for isometric exercises */
   holdSeconds?: number;
+  /** Per-exercise countdown for warmup phase; only set when exerciseRole === "warmup". v2.4.5 §5.4. */
+  warmupDurationSeconds?: number;
   /** For grouped cards (warm-up block, accessories superset). When present,
    *  the UI renders this PlannedExercise as a single card with the sub-items
    *  listed inside. The parent's name becomes the card header. */

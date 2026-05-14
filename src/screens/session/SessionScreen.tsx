@@ -169,12 +169,14 @@ function ExerciseCard({
   isCurrent,
   isDone,
   currentSet,
+  warmupTimerSeconds,
   onTapDetail,
 }: {
   exercise: PlannedExercise;
   isCurrent: boolean;
   isDone: boolean;
   currentSet: number;
+  warmupTimerSeconds?: number | null;
   onTapDetail: () => void;
 }) {
   const isFuture = !isCurrent && !isDone;
@@ -213,11 +215,20 @@ function ExerciseCard({
             </Text>
           )}
           <Text style={[cardStyles.meta, isCurrent && cardStyles.metaCurrent, isDone && { opacity: 0.4 }]}>
-            {exercise.sets} sets × {(progression?.isIsometric || exercise.exerciseRole === "skill_isometric")
-              ? `${exercise.holdSeconds ?? exercise.reps}s hold`
-              : `${exercise.reps} reps`}
+            {exercise.sets} sets × {
+              exercise.exerciseRole === "warmup" && exercise.warmupDurationSeconds
+                ? `${exercise.reps > 0 ? `${exercise.reps} reps` : `${exercise.warmupDurationSeconds}s`}`
+                : (progression?.isIsometric || exercise.exerciseRole === "skill_isometric")
+                  ? `${exercise.holdSeconds ?? exercise.reps}s hold`
+                  : `${exercise.reps} reps`
+            }
             {isCurrent && ` · ${exercise.restSeconds}s rest`}
           </Text>
+          {isCurrent && exercise.exerciseRole === "warmup" && warmupTimerSeconds != null && (
+            <Text style={cardStyles.warmupTimerText}>
+              {Math.floor(warmupTimerSeconds / 60)}:{(warmupTimerSeconds % 60).toString().padStart(2, "0")}
+            </Text>
+          )}
         </View>
 
         {/* Difficulty tag — only on current exercise */}
@@ -349,6 +360,15 @@ const cardStyles = StyleSheet.create({
     color: "rgba(255,255,255,0.4)",
     fontStyle: "italic",
     lineHeight: 18,
+  },
+  // v2.4.5 §5.4 — live warm-up countdown on the active card
+  warmupTimerText: {
+    marginTop: 6,
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.accent,
+    letterSpacing: 1,
+    fontVariant: ["tabular-nums"],
   },
   // v2.4.1 grouped card (warm-up, accessories superset)
   groupHeader: {
@@ -526,6 +546,12 @@ export default function SessionScreen({ navigation, route }: any) {
   const [resting, setResting] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const [restTotal, setRestTotal] = useState(0);
+  // v2.4.5 §5.4 — active per-warmup countdown. Kept separate from `resting`
+  // so the 10s between-set rest (which uses the existing rest-timer state)
+  // never collides with the active-work countdown.
+  const [warmupTiming, setWarmupTiming] = useState(false);
+  const [warmupTime, setWarmupTime] = useState(0);
+  const [warmupTotal, setWarmupTotal] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [arnoldMsg, setArnoldMsg] = useState("Let's get after it.");
   const [chatOpen, setChatOpen] = useState(false);
@@ -627,6 +653,11 @@ export default function SessionScreen({ navigation, route }: any) {
 
   // DONE button handler
   const handleDone = () => {
+    // v2.4.5 §5.4 — clear the active warm-up countdown so the timer effect
+    // doesn't double-fire handleDone() a tick later.
+    setWarmupTiming(false);
+    setWarmupTime(0);
+
     // v2.4.1 grouped cards (warm-up, accessory superset): one DONE press
     // advances the whole block. Sub-items aren't individually tracked.
     const isGrouped = !!(currentEx?.subExercises && currentEx.subExercises.length > 0);
@@ -714,6 +745,62 @@ export default function SessionScreen({ navigation, route }: any) {
     setRestTime(0);
     arnoldSay("No rest? Respect. Go.");
   };
+
+  // v2.4.5 §5.4 — skip the current warm-up exercise without logging sets.
+  // Advances to the next warmup or transitions to training when on the last.
+  const handleSkipWarmupExercise = () => {
+    if (sessionPhase !== "warmup") return;
+    setWarmupTiming(false);
+    setWarmupTime(0);
+    const isLastExercise = currentExIdx >= currentPhaseExercises.length - 1;
+    if (resting) {
+      setResting(false);
+      setRestTime(0);
+    }
+    if (isLastExercise) {
+      exerciseLayouts.current = {};
+      setSessionPhase("training");
+      setCurrentExIdx(0);
+      setCurrentSetIdx(0);
+      arnoldSay("Warm-up done. Let's work.");
+    } else {
+      setCurrentExIdx((i) => i + 1);
+      setCurrentSetIdx(0);
+    }
+  };
+
+  // v2.4.5 §5.4 — warm-up countdown tick. Decrements once per second; when it
+  // hits 0, auto-fires handleDone() (same path as a manual DONE tap). Placed
+  // after handleDone definition so the closure captures it without TDZ warning.
+  const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (warmupTiming && warmupTime > 0) {
+      warmupTimerRef.current = setTimeout(() => setWarmupTime((t) => t - 1), 1000);
+    } else if (warmupTiming && warmupTime === 0) {
+      setWarmupTiming(false);
+      handleDone();
+    }
+    return () => clearTimeout(warmupTimerRef.current);
+  }, [warmupTiming, warmupTime]);
+
+  // v2.4.5 §5.4 — kick off the countdown when a warm-up set becomes active.
+  // Paused while between-set rest is running (the 10s rest takes precedence).
+  useEffect(() => {
+    if (sessionPhase !== "warmup") return;
+    if (resting) return;
+    if (!currentEx || currentEx.exerciseRole !== "warmup") return;
+    const duration = currentEx.warmupDurationSeconds;
+    if (!duration || duration <= 0) return;
+
+    setWarmupTotal(duration);
+    setWarmupTime(duration);
+    setWarmupTiming(true);
+
+    return () => {
+      setWarmupTiming(false);
+      setWarmupTime(0);
+    };
+  }, [sessionPhase, currentExIdx, currentSetIdx, resting]);
 
 
 
@@ -837,6 +924,8 @@ export default function SessionScreen({ navigation, route }: any) {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
+                      setWarmupTiming(false);
+                      setWarmupTime(0);
                       arnoldSay("Skipping warm-up. Let's go.");
                       exerciseLayouts.current = {};
                       setSessionPhase("training");
@@ -917,11 +1006,25 @@ export default function SessionScreen({ navigation, route }: any) {
                       isCurrent={isCurrent}
                       isDone={isDone}
                       currentSet={isCurrent ? currentSetIdx : 0}
+                      warmupTimerSeconds={
+                        isCurrent && sessionPhase === "warmup" && warmupTiming && !resting
+                          ? warmupTime
+                          : null
+                      }
                       onTapDetail={() => setDetailExercise({
                         section: sessionPhase === "warmup" ? "warmUp" : sessionPhase === "training" ? "main" : "cooldown",
                         index: i,
                       })}
                     />
+                  )}
+                  {sessionPhase === "warmup" && isCurrent && (
+                    <TouchableOpacity
+                      onPress={handleSkipWarmupExercise}
+                      style={styles.skipWarmupExerciseBtn}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.skipWarmupExerciseText}>Skip this exercise</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               );
@@ -1067,6 +1170,22 @@ export default function SessionScreen({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+
+  // v2.4.5 §5.4 — per-warmup-card skip button
+  skipWarmupExerciseBtn: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 4,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  skipWarmupExerciseText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+  },
 
   // Progress header
   progressHeader: {

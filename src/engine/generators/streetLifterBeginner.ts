@@ -125,15 +125,20 @@ function getWaveReps(weekInBlock: number, baseMin: number, baseMax: number): num
 // ── Warm-ups & Cooldowns ────────────────────────────────────────────────────
 
 function makeWarmup(id: string, name: string, sets: number, reps: number, isIsometric: boolean): PlannedExercise {
+  // v2.4.5 §5.4: warm-ups are first-class steps with per-exercise duration
+  // and 10s rest between same-exercise sets. Iso holds use their reps value
+  // as the duration; rep-based warm-ups default to 30s.
+  const warmupDurationSeconds = isIsometric ? reps : 30;
   return {
     id,
     progressionId: "warmup",
     name,
     sets,
     reps,
-    restSeconds: 0,
+    restSeconds: 10,
     difficultyIntent: "easy",
     exerciseRole: "warmup",
+    warmupDurationSeconds,
     ...(isIsometric ? { holdSeconds: reps } : {}),
   };
 }

@@ -20,6 +20,7 @@ import {
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
+import { getRampFloor } from "../exerciseFloors";
 import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
 
 // ── Phase Template ──────────────────────────────────────────────────────────
@@ -138,9 +139,13 @@ function makeEx(
 }
 
 function makeWarmup(id: string, name: string, sets: number, reps: number, iso: boolean): PlannedExercise {
+  // v2.4.5 §5.4: per-exercise duration + 10s between-set rest.
+  const warmupDurationSeconds = iso ? reps : 30;
   return {
-    id, progressionId: "warmup", name, sets, reps, restSeconds: 0,
-    difficultyIntent: "easy", exerciseRole: "warmup", ...(iso ? { holdSeconds: reps } : {}),
+    id, progressionId: "warmup", name, sets, reps, restSeconds: 10,
+    difficultyIntent: "easy", exerciseRole: "warmup",
+    warmupDurationSeconds,
+    ...(iso ? { holdSeconds: reps } : {}),
   };
 }
 
@@ -541,6 +546,15 @@ function getPattern(exerciseId: string): "pulling" | "pushing" | "legs" | null {
 }
 
 function stampWeights(session: PlannedSession, e1rm: E1RMProfile, dayType?: "heavy" | "peak_singles"): void {
+  // Pre-scan: count ramp_up sets per progressionId so getTargetWeight can
+  // distribute the 50% → 90% scale across the correct number of stages.
+  const rampCounts = new Map<string, number>();
+  for (const ex of session.exercises) {
+    if (ex.exerciseRole === "ramp_up") {
+      rampCounts.set(ex.progressionId, (rampCounts.get(ex.progressionId) ?? 0) + 1);
+    }
+  }
+
   let rampIdx = 0;
   let lastRampProgId = "";
   for (const ex of session.exercises) {
@@ -553,7 +567,9 @@ function stampWeights(session: PlannedSession, e1rm: E1RMProfile, dayType?: "hea
         rampIdx = 0;
         lastRampProgId = ex.progressionId;
       }
-      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx, dayType);
+      const floor = getRampFloor(ex.progressionId, "intermediate");
+      const total = rampCounts.get(ex.progressionId);
+      ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, "ramp_up", rampIdx, dayType, floor, total);
       rampIdx++;
     } else {
       ex.addedWeightKg = getTargetWeight(e1rm, pattern, session.phase, ex.exerciseRole, undefined, dayType);

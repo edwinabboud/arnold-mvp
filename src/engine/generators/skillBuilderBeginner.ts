@@ -141,59 +141,60 @@ function getLsitId(coreId: string): string {
 // ── v2.4.1: Grouped Warm-up Block ───────────────────────────────────────────
 
 /**
- * Returns a single PlannedExercise representing the entire warm-up for the
- * session. Sub-items live in `subExercises`. UI renders this as one card.
- * Per v2.4.1 amendment: MVP uses existing v1.0 warm-up pools — canonical
- * 7-drill wrist sequence is deferred to v1.5.
+ * Returns the warm-up exercises for a session as individual vertical cards.
+ * v2.4.5 Change 3: warmups are first-class steps — no grouped card, no
+ * subExercises. Each exercise gets `restSeconds: 10` (§5.4 between-set rest)
+ * and `warmupDurationSeconds` (per-exercise timer hint).
  */
-function buildGroupedWarmup(
+function buildWarmupExercises(
   sessionType: "push_skill" | "pull_skill" | "legs",
   weekId: string,
-): PlannedExercise {
-  const subPrefix = `${weekId}_wu`;
-  let subs: SubExercise[];
+): PlannedExercise[] {
+  const p = `${weekId}_wu`;
+  type Item = { name: string; sets: number; reps: number; durationSeconds: number; notes?: string };
+  let items: Item[];
 
   switch (sessionType) {
     case "push_skill":
-      subs = [
-        { id: `${subPrefix}0`, name: "Wrist Circles", prescription: "1 × 15" },
-        { id: `${subPrefix}1`, name: "Wrist Rocks", prescription: "1 × 10" },
-        { id: `${subPrefix}2`, name: "Shoulder Dislocates", prescription: "1 × 15" },
-        { id: `${subPrefix}3`, name: "Scap Push-ups", prescription: "2 × 10" },
-        { id: `${subPrefix}4`, name: "Hollow Body", prescription: "3 × 15s hold" },
+      items = [
+        { name: "Wrist Circles", sets: 1, reps: 15, durationSeconds: 30 },
+        { name: "Wrist Rocks", sets: 1, reps: 10, durationSeconds: 30 },
+        { name: "Shoulder Dislocates", sets: 1, reps: 15, durationSeconds: 30 },
+        { name: "Scap Push-ups", sets: 2, reps: 10, durationSeconds: 30 },
+        { name: "Hollow Body", sets: 3, reps: 15, durationSeconds: 15, notes: "15s hold" },
       ];
       break;
     case "pull_skill":
-      subs = [
-        { id: `${subPrefix}0`, name: "Band Pull-Aparts", prescription: "2 × 15" },
-        { id: `${subPrefix}1`, name: "Active Hang", prescription: "1 × 30s hold" },
-        { id: `${subPrefix}2`, name: "Scap Pulls", prescription: "2 × 8" },
-        { id: `${subPrefix}3`, name: "Cat-Cow", prescription: "1 × 10" },
+      items = [
+        { name: "Band Pull-Aparts", sets: 2, reps: 15, durationSeconds: 30 },
+        { name: "Active Hang", sets: 1, reps: 30, durationSeconds: 30, notes: "30s hold" },
+        { name: "Scap Pulls", sets: 2, reps: 8, durationSeconds: 30 },
+        { name: "Cat-Cow", sets: 1, reps: 10, durationSeconds: 30 },
       ];
       break;
     case "legs":
-      subs = [
-        { id: `${subPrefix}0`, name: "Arm Circles", prescription: "1 × 20" },
-        { id: `${subPrefix}1`, name: "Jumping Jacks", prescription: "1 × 30" },
-        { id: `${subPrefix}2`, name: "Bodyweight Squats", prescription: "2 × 10" },
-        { id: `${subPrefix}3`, name: "Leg Swings", prescription: "1 × 10 each side" },
-        { id: `${subPrefix}4`, name: "Deep Squat Hold", prescription: "1 × 30s hold" },
+      items = [
+        { name: "Arm Circles", sets: 1, reps: 20, durationSeconds: 30 },
+        { name: "Jumping Jacks", sets: 1, reps: 30, durationSeconds: 30 },
+        { name: "Bodyweight Squats", sets: 2, reps: 10, durationSeconds: 30 },
+        { name: "Leg Swings", sets: 1, reps: 10, durationSeconds: 30, notes: "each side" },
+        { name: "Deep Squat Hold", sets: 1, reps: 30, durationSeconds: 30, notes: "30s hold" },
       ];
       break;
   }
 
-  return {
-    id: `${weekId}_warmup`,
+  return items.map((item, i) => ({
+    id: `${p}${i}`,
     progressionId: "warmup",
-    name: "Warm-up",
-    groupLabel: "Warm-up",
-    sets: 1,
-    reps: 0,
-    restSeconds: 0,
-    difficultyIntent: "easy",
-    exerciseRole: "warmup",
-    subExercises: subs,
-  };
+    name: item.name,
+    sets: item.sets,
+    reps: item.reps,
+    restSeconds: 10,
+    difficultyIntent: "easy" as const,
+    exerciseRole: "warmup" as const,
+    warmupDurationSeconds: item.durationSeconds,
+    ...(item.notes ? { notes: item.notes } : {}),
+  }));
 }
 
 // ── Cooldown (unchanged from v1.0) ──────────────────────────────────────────
@@ -359,7 +360,7 @@ function buildSessionA(
     phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("push_skill", prefix)],
+    warmUpExercises: buildWarmupExercises("push_skill", prefix),
     cooldownExercises: getCooldownExercises("push_skill", prefix),
   };
 }
@@ -415,7 +416,7 @@ function buildSessionB(
     phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("pull_skill", prefix)],
+    warmUpExercises: buildWarmupExercises("pull_skill", prefix),
     cooldownExercises: getCooldownExercises("pull_skill", prefix),
   };
 }
@@ -468,7 +469,7 @@ function buildSessionC(
     phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("legs", prefix)],
+    warmUpExercises: buildWarmupExercises("legs", prefix),
     cooldownExercises: getCooldownExercises("legs", prefix),
   };
 }

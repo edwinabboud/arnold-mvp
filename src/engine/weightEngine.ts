@@ -127,6 +127,8 @@ export function getTargetWeight(
   role: string,
   rampUpSetIndex?: number,
   dayType?: "heavy" | "peak_singles",
+  floorKg?: number,
+  totalRampSets?: number,
 ): number {
   const e1rm = pattern === "pulling" ? e1rmProfile.pullUp
     : pattern === "pushing" ? e1rmProfile.dip
@@ -142,13 +144,29 @@ export function getTargetWeight(
     ? PHASE_INTENSITY.peaking
     : intensity;
 
-  // Ramp-up sets: percentages applied to ADDED working weight, not total load
+  // Ramp-up sets (v2.4.5 §10.3):
+  //   Stage 1 (set 0): loaded warm-up — always at the exercise/tier floor
+  //   Stages 2+:       ramp from 50% → 90% of working added, distributed
+  //                    across remaining sets; never falls below floor.
   if (role === "ramp_up" && rampUpSetIndex !== undefined) {
     const workingTotalLoad = e1rm.totalE1RM * effectiveIntensity.workingPct;
     const workingAdded = Math.max(0, workingTotalLoad - e1rm.bwContribution);
-    const rampPcts = [0.25, 0.50, 0.75, 0.85];
-    const pct = rampPcts[Math.min(rampUpSetIndex, rampPcts.length - 1)];
-    const rampAdded = workingAdded * pct;
+    const floor = floorKg ?? 0;
+    const totalSets = totalRampSets ?? 4;
+
+    if (rampUpSetIndex === 0) {
+      return roundToPlate(floor);
+    }
+
+    const rampSetCount = totalSets - 1;
+    const rampIdx = rampUpSetIndex - 1;
+    const minPct = 0.50;
+    const maxPct = 0.90;
+    const pct = rampSetCount > 1
+      ? minPct + ((maxPct - minPct) * (rampIdx / (rampSetCount - 1)))
+      : maxPct;
+    const rampAdded = Math.max(floor, workingAdded * pct);
+
     return roundToPlate(rampAdded);
   }
 

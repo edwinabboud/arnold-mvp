@@ -155,65 +155,66 @@ type SessionType = "push_skill" | "pull_skill" | "pure_skill" | "strength";
  * MVP uses existing v1.0 warm-up pools — canonical 7-drill wrist sequence is
  * deferred to v1.5.
  */
-function buildGroupedWarmup(type: SessionType, prefix: string): PlannedExercise {
+function buildWarmupExercises(type: SessionType, prefix: string): PlannedExercise[] {
   const p = `${prefix}_wu`;
-  let subs: SubExercise[];
+  type Item = { name: string; sets: number; reps: number; durationSeconds: number; notes?: string };
+  let items: Item[];
 
   switch (type) {
     case "push_skill":
-      subs = [
-        { id: `${p}0`, name: "Wrist Circles", prescription: "1 × 15" },
-        { id: `${p}1`, name: "Wrist Rocks", prescription: "1 × 10" },
-        { id: `${p}2`, name: "Wrist Loading", prescription: "1 × 30s hold" },
-        { id: `${p}3`, name: "Shoulder Dislocates", prescription: "1 × 15" },
-        { id: `${p}4`, name: "Scap Push-ups", prescription: "2 × 10" },
-        { id: `${p}5`, name: "Cat-Cow", prescription: "1 × 10" },
-        { id: `${p}6`, name: "Hollow Body", prescription: "3 × 15s hold" },
+      items = [
+        { name: "Wrist Circles", sets: 1, reps: 15, durationSeconds: 30 },
+        { name: "Wrist Rocks", sets: 1, reps: 10, durationSeconds: 30 },
+        { name: "Wrist Loading", sets: 1, reps: 30, durationSeconds: 30, notes: "30s hold" },
+        { name: "Shoulder Dislocates", sets: 1, reps: 15, durationSeconds: 30 },
+        { name: "Scap Push-ups", sets: 2, reps: 10, durationSeconds: 30 },
+        { name: "Cat-Cow", sets: 1, reps: 10, durationSeconds: 30 },
+        { name: "Hollow Body", sets: 3, reps: 15, durationSeconds: 15, notes: "15s hold" },
       ];
       break;
     case "pull_skill":
-      subs = [
-        { id: `${p}0`, name: "Band Pull-Aparts", prescription: "2 × 15" },
-        { id: `${p}1`, name: "Active Hang", prescription: "1 × 30s hold" },
-        { id: `${p}2`, name: "Scap Pulls", prescription: "2 × 8" },
-        { id: `${p}3`, name: "Thoracic Rotation", prescription: "1 × 10" },
+      items = [
+        { name: "Band Pull-Aparts", sets: 2, reps: 15, durationSeconds: 30 },
+        { name: "Active Hang", sets: 1, reps: 30, durationSeconds: 30, notes: "30s hold" },
+        { name: "Scap Pulls", sets: 2, reps: 8, durationSeconds: 30 },
+        { name: "Thoracic Rotation", sets: 1, reps: 10, durationSeconds: 30 },
       ];
       break;
     case "pure_skill":
-      subs = [
-        { id: `${p}0`, name: "Wrist Circles", prescription: "1 × 15" },
-        { id: `${p}1`, name: "Wrist Rocks", prescription: "1 × 10" },
-        { id: `${p}2`, name: "Wrist Loading", prescription: "1 × 30s hold" },
-        { id: `${p}3`, name: "Shoulder Dislocates", prescription: "1 × 15" },
-        { id: `${p}4`, name: "Hip Circles", prescription: "1 × 10" },
-        { id: `${p}5`, name: "Cat-Cow", prescription: "1 × 10" },
-        { id: `${p}6`, name: "Hollow Body", prescription: "3 × 15s hold" },
-        { id: `${p}7`, name: "Active Hang", prescription: "1 × 30s hold" },
+      items = [
+        { name: "Wrist Circles", sets: 1, reps: 15, durationSeconds: 30 },
+        { name: "Wrist Rocks", sets: 1, reps: 10, durationSeconds: 30 },
+        { name: "Wrist Loading", sets: 1, reps: 30, durationSeconds: 30, notes: "30s hold" },
+        { name: "Shoulder Dislocates", sets: 1, reps: 15, durationSeconds: 30 },
+        { name: "Hip Circles", sets: 1, reps: 10, durationSeconds: 30 },
+        { name: "Cat-Cow", sets: 1, reps: 10, durationSeconds: 30 },
+        { name: "Hollow Body", sets: 3, reps: 15, durationSeconds: 15, notes: "15s hold" },
+        { name: "Active Hang", sets: 1, reps: 30, durationSeconds: 30, notes: "30s hold" },
       ];
       break;
     case "strength":
-      subs = [
-        { id: `${p}0`, name: "Arm Circles", prescription: "1 × 20" },
-        { id: `${p}1`, name: "Jumping Jacks", prescription: "1 × 30" },
-        { id: `${p}2`, name: "Band Pull-Aparts", prescription: "2 × 15" },
-        { id: `${p}3`, name: "Scap Push-ups", prescription: "2 × 10" },
-        { id: `${p}4`, name: "Scap Pulls", prescription: "2 × 8" },
+      items = [
+        { name: "Arm Circles", sets: 1, reps: 20, durationSeconds: 30 },
+        { name: "Jumping Jacks", sets: 1, reps: 30, durationSeconds: 30 },
+        { name: "Band Pull-Aparts", sets: 2, reps: 15, durationSeconds: 30 },
+        { name: "Scap Push-ups", sets: 2, reps: 10, durationSeconds: 30 },
+        { name: "Scap Pulls", sets: 2, reps: 8, durationSeconds: 30 },
       ];
       break;
   }
 
-  return {
-    id: `${prefix}_warmup`,
+  return items.map((item, i) => ({
+    id: `${p}${i}`,
     progressionId: "warmup",
-    name: "Warm-up",
-    groupLabel: "Warm-up",
-    sets: 1,
-    reps: 0,
-    restSeconds: 0,
-    difficultyIntent: "easy",
-    exerciseRole: "warmup",
-    subExercises: subs,
-  };
+    name: item.name,
+    sets: item.sets,
+    reps: item.reps,
+    restSeconds: 10,
+    difficultyIntent: "easy" as const,
+    exerciseRole: "warmup" as const,
+    warmupDurationSeconds: item.durationSeconds,
+    ...(item.notes ? { notes: item.notes } : {}),
+  }));
 }
 
 // ── Cooldown (unchanged from v1.0) ──────────────────────────────────────────
@@ -394,7 +395,7 @@ function buildSessionA(
     id: prefix, weekId, dayOfWeek, label: "Push + Skill (A)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("push_skill", prefix)],
+    warmUpExercises: buildWarmupExercises("push_skill", prefix),
     cooldownExercises: getCooldownExercises("push_skill", prefix),
   };
 }
@@ -443,7 +444,7 @@ function buildSessionB(
     id: prefix, weekId, dayOfWeek, label: "Pull + Skill (B)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("pull_skill", prefix)],
+    warmUpExercises: buildWarmupExercises("pull_skill", prefix),
     cooldownExercises: getCooldownExercises("pull_skill", prefix),
   };
 }
@@ -500,7 +501,7 @@ function buildSessionC(
     id: prefix, weekId, dayOfWeek, label: "Pure Skill (C)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("pure_skill", prefix)],
+    warmUpExercises: buildWarmupExercises("pure_skill", prefix),
     cooldownExercises: getCooldownExercises("pure_skill", prefix),
   };
 }
@@ -551,7 +552,7 @@ function buildSessionD(
     id: prefix, weekId, dayOfWeek, label: "Strength (D)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("strength", prefix)],
+    warmUpExercises: buildWarmupExercises("strength", prefix),
     cooldownExercises: getCooldownExercises("strength", prefix),
   };
 }
@@ -589,7 +590,7 @@ function buildSessionE(
     id: prefix, weekId, dayOfWeek, label: "Legs + Core (E)", phase,
     patterns: derivePatternsFromExercises(exercises, PROGRESSIONS),
     exercises,
-    warmUpExercises: [buildGroupedWarmup("strength", prefix)],
+    warmUpExercises: buildWarmupExercises("strength", prefix),
     cooldownExercises: getCooldownExercises("strength", prefix),
   };
 }

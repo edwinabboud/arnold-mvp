@@ -1,4 +1,4 @@
-import type { UserBenchmarks, ProgramPath, TrainerTier } from "../types";
+import type { UserBenchmarks, ProgramPath, TrainerTier, UserProfile } from "../types";
 
 /**
  * Auto-assigns TrainerTier from collected benchmarks.
@@ -82,4 +82,15 @@ export function assignTier(
   }
 
   return "beginner";
+}
+
+/**
+ * Returns the user's current tier from their profile. Falls back to
+ * "intermediate" when the profile or tier is unset — a safe middle default
+ * (beginner would under-load, advanced would over-load).
+ */
+export function getCurrentTier(profile: UserProfile | null | undefined): TrainerTier {
+  const tier = profile?.tier;
+  if (tier === "beginner" || tier === "intermediate" || tier === "advanced") return tier;
+  return "intermediate";
 }
