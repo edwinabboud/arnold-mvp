@@ -550,7 +550,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
             <View style={styles.spacer} />
             
             {userWeight && userHeight ? (
-              <PrimaryButton label="Continue" onPress={() => goToStep(2)} />
+              <PrimaryButton label="Continue" onPress={() => { Keyboard.dismiss(); goToStep(2); }} />
             ) : (
               <PrimaryButton label="Enter weight and height" onPress={() => {}} disabled />
             )}

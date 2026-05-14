@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Keyboard,
 } from "react-native";
 import { colors } from "../../theme";
 import type { UserBenchmarks, FrontLeverLevel, PlancheLevel } from "../../types";
@@ -88,6 +89,7 @@ function NumberField({
           placeholderTextColor={colors.textMuted}
           keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
           returnKeyType="done"
+          onSubmitEditing={() => Keyboard.dismiss()}
           maxLength={allowDecimal ? 6 : 3}
           autoCorrect={false}
           autoCapitalize="none"
@@ -561,13 +563,13 @@ export default function BenchmarkInput({ programPath, onComplete, onBack }: Benc
         )}
       </ScrollView>
 
-      <TouchableOpacity style={s.cantDoBtn} onPress={handleCantDoThis}>
+      <TouchableOpacity style={s.cantDoBtn} onPress={() => { Keyboard.dismiss(); handleCantDoThis(); }}>
         <Text style={s.cantDoText}>Can't do this yet</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[s.primaryBtn, !isCurrentValid() && s.primaryBtnDisabled]}
-        onPress={advance}
+        onPress={() => { Keyboard.dismiss(); advance(); }}
         disabled={!isCurrentValid()}
       >
         <Text style={[s.primaryBtnText, !isCurrentValid() && s.primaryBtnTextDisabled]}>
