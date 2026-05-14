@@ -172,11 +172,11 @@ export default function AppNavigation() {
   return (
     <NavigationContainer>
       {session === null ? (
-        <AuthStack />
+        <AuthStack key="auth" />
       ) : onboardingComplete ? (
-        <MainStack />
+        <MainStack key="main" />
       ) : (
-        <OnboardingStack />
+        <OnboardingStack key="onboarding" />
       )}
     </NavigationContainer>
   );

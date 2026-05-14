@@ -145,7 +145,9 @@ export default function HomeScreen({ navigation }: any) {
               useStore.getState().resetStore();
               console.log('[ARNOLD] Zustand store reset');
             } catch (err) {
-              console.error('[ARNOLD] DEV RESET failed:', err);
+              console.warn('[ARNOLD] Dev reset error:', err);
+              await AsyncStorage.clear();
+              useStore.getState().resetStore();
             }
           },
         },
