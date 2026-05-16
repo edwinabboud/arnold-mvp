@@ -17,6 +17,9 @@ export default {
     ios: {
       supportsTablet: false,
       bundleIdentifier: "com.arnold.coach",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
       // Privacy manifest — mirrors PrivacyInfo.xcprivacy at project root.
       // EAS Build embeds this into the iOS bundle. Required by Apple since iOS 17.
       privacyManifests: {
