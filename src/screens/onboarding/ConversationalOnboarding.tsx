@@ -34,6 +34,7 @@ import BenchmarkInput from "./BenchmarkInput";
 import { assignTier } from "../../engine/tierAssignment";
 import type { UserBenchmarks } from "../../types";
 import { isDevUser } from "../../config/devAccess";
+import DisclaimerModal, { hasAcknowledgedDisclaimer } from "../../components/DisclaimerModal";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -221,6 +222,13 @@ export default function ConversationalOnboarding({ navigation }: any) {
   const [collectedBenchmarks, setCollectedBenchmarks] = useState<UserBenchmarks | null>(null);
   const [collectedExperienceLevel, setCollectedExperienceLevel] = useState<"new" | "experienced" | null>(null);
 
+  // Disclaimer modal — blocking, once-per-device gate before plan generation
+  const [disclaimerVisible, setDisclaimerVisible] = useState(false);
+  const [pendingCompletion, setPendingCompletion] = useState<{
+    exp: "new" | "experienced";
+    bm: UserBenchmarks;
+  } | null>(null);
+
   // Animation
   const fadeAnim = useState(new Animated.Value(1))[0];
 
@@ -298,6 +306,27 @@ export default function ConversationalOnboarding({ navigation }: any) {
 
   const handleTargetRemove = (target: string) => {
     setSelectedTargets(prev => prev.filter(t => t !== target));
+  };
+
+  // Disclaimer gate — runs before plan generation. If this device hasn't yet
+  // acknowledged the disclaimer, stash the completion args and show the blocking
+  // modal; otherwise proceed straight to plan generation as before.
+  const gateAndComplete = async (exp: "new" | "experienced", bm: UserBenchmarks) => {
+    const acknowledged = await hasAcknowledgedDisclaimer();
+    if (acknowledged) {
+      handleComplete(exp, bm);
+    } else {
+      setPendingCompletion({ exp, bm });
+      setDisclaimerVisible(true);
+    }
+  };
+
+  const handleDisclaimerAcknowledge = () => {
+    setDisclaimerVisible(false);
+    if (pendingCompletion) {
+      handleComplete(pendingCompletion.exp, pendingCompletion.bm);
+      setPendingCompletion(null);
+    }
   };
 
   // Complete onboarding handler
@@ -839,7 +868,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
               }
               setCollectedExperienceLevel(exp);
               setCollectedBenchmarks(bm);
-              handleComplete(exp, bm);
+              gateAndComplete(exp, bm);
             }}
           />
         );
@@ -862,6 +891,10 @@ export default function ConversationalOnboarding({ navigation }: any) {
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         {renderStep()}
       </Animated.View>
+      <DisclaimerModal
+        visible={disclaimerVisible}
+        onAcknowledge={handleDisclaimerAcknowledge}
+      />
     </SafeAreaView>
   );
 }

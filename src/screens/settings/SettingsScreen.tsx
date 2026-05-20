@@ -18,8 +18,9 @@ import Constants from "expo-constants";
 import { colors, typography, spacing, radius } from "../../theme";
 import { supabase } from "../../config/supabase";
 import DeleteAccountDialog from "./DeleteAccountDialog";
+import { DISCLAIMER_PARAGRAPH_1, DISCLAIMER_PARAGRAPH_2 } from "../../components/DisclaimerModal";
 
-type Placeholder = "terms" | "privacy" | null;
+type Placeholder = "terms" | "privacy" | "disclaimers" | null;
 
 export default function SettingsScreen({ navigation }: { navigation: { goBack: () => void } }) {
   const [email, setEmail] = useState<string>("");
@@ -81,6 +82,11 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
             <Text style={styles.rowLabel}>Privacy Policy</Text>
             <Text style={styles.rowChevron}>›</Text>
           </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.row} onPress={() => setPlaceholder("disclaimers")} activeOpacity={0.6}>
+            <Text style={styles.rowLabel}>Disclaimers</Text>
+            <Text style={styles.rowChevron}>›</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -95,13 +101,24 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
         <View style={styles.placeholderBackdrop}>
           <View style={styles.placeholderCard}>
             <Text style={styles.placeholderTitle}>
-              {placeholder === "terms" ? "Terms of Service" : "Privacy Policy"}
-            </Text>
-            <Text style={styles.placeholderBody}>
               {placeholder === "terms"
-                ? "Terms coming before public launch."
-                : "Privacy policy coming before public launch."}
+                ? "Terms of Service"
+                : placeholder === "privacy"
+                ? "Privacy Policy"
+                : "Disclaimers"}
             </Text>
+            {placeholder === "disclaimers" ? (
+              <ScrollView style={styles.disclaimerScroll} showsVerticalScrollIndicator={false}>
+                <Text style={styles.placeholderBody}>{DISCLAIMER_PARAGRAPH_1}</Text>
+                <Text style={styles.placeholderBody}>{DISCLAIMER_PARAGRAPH_2}</Text>
+              </ScrollView>
+            ) : (
+              <Text style={styles.placeholderBody}>
+                {placeholder === "terms"
+                  ? "Terms coming before public launch."
+                  : "Privacy policy coming before public launch."}
+              </Text>
+            )}
             <TouchableOpacity
               style={styles.placeholderClose}
               onPress={() => setPlaceholder(null)}
@@ -214,6 +231,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 22,
     marginBottom: spacing.lg,
+  },
+  disclaimerScroll: {
+    maxHeight: 360,
+    marginBottom: spacing.xs,
   },
   placeholderClose: {
     height: 48,
