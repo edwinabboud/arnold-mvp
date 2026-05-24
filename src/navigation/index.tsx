@@ -105,25 +105,42 @@ export default function AppNavigation() {
   const onboardingComplete = useStore((s) => s.profile?.onboardingComplete ?? false);
   const storeProfile = useStore((s) => s.profile);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [hydrating, setHydrating] = useState(false);
   const hydrationAttempted = useRef(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setLoading(false);
-    });
-
+    // Single source of truth: onAuthStateChange. It always fires once on
+    // subscription with the INITIAL_SESSION event, AFTER Supabase's internal
+    // AsyncStorage read completes. Calling getSession() directly races that
+    // read on cold start and can return null even for signed-in users —
+    // which was the cold-reopen sign-out bug.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
+      setAuthReady(true);
       // Reset hydration flag on sign-out so next sign-in re-hydrates
       if (!s) {
         hydrationAttempted.current = false;
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety net: if onAuthStateChange somehow never fires (Supabase client
+    // misconfigured, storage adapter broken, etc.), don't hang on LoadingScreen
+    // forever. After 5s, treat auth as ready with whatever session we have
+    // (probably null, which routes to AuthStack — recoverable by signing in).
+    const timeoutId = setTimeout(() => {
+      setAuthReady((ready: boolean) => {
+        if (!ready) {
+          console.warn("[ARNOLD] Auth readiness timeout — proceeding without onAuthStateChange");
+        }
+        return true;
+      });
+    }, 5000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Hydrate from Supabase when authenticated but local store is empty
@@ -165,7 +182,7 @@ export default function AppNavigation() {
       });
   }, [session, storeProfile]);
 
-  if (loading || hydrating) {
+  if (!authReady || hydrating) {
     return <LoadingScreen />;
   }
 
