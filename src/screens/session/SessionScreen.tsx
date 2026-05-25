@@ -14,7 +14,9 @@ import {
   StyleSheet,
   Modal,
   Dimensions,
+  AppState,
 } from "react-native";
+import * as Notifications from "expo-notifications";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
@@ -34,6 +36,32 @@ import { useChatService } from '../../hooks/useChatService';
 import ArnoldWaveform from "../../components/waveform/ArnoldWaveform";
 import ChatWidget from "../../components/chat/ChatWidget";
 import ExerciseDetail from "../../components/exercise/ExerciseDetail";
+
+// ── Notifications (MVP 1.16) ─────────────────────────────────────────────────
+// Suppress in-app banner/sound while Arnold is foregrounded — the in-session
+// Arnold message already cues the user, so a notification on top would double-cue.
+// iOS still delivers the notification when the app is backgrounded/closed.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: false,
+    shouldShowList: false,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+// Request notification permission lazily — the first time a timer needs to
+// schedule one. Keeps onboarding clean. Returns false gracefully if denied;
+// the timer still works, just with no OS notification (same UX as before 1.16).
+async function ensureNotificationPermission(): Promise<boolean> {
+  const settings = await Notifications.getPermissionsAsync();
+  if (settings.granted) return true;
+  if (settings.canAskAgain) {
+    const req = await Notifications.requestPermissionsAsync();
+    return req.granted;
+  }
+  return false;
+}
 
 // ── Intent colors ───────────────────────────────────────────────────────────
 
@@ -530,6 +558,60 @@ const fwStyles = StyleSheet.create({
   summaryText: { fontSize: 14, color: colors.textMuted },
 });
 
+// ── Resume position (MVP 1.16.1) ─────────────────────────────────────────────
+// When a session is resumed (activeSession persisted with prior completedSets),
+// figure out where to drop the user back in so they continue instead of
+// restarting — and so already-logged sets aren't re-logged as duplicates.
+// Derived purely from completedSets; degrades to the top on any ambiguity.
+// Grouped cards (warm-up blocks / supersets) don't log sets, so at worst one
+// already-finished grouped card may be re-shown — harmless (no per-set logging).
+type SessionPhase = "warmup" | "training" | "cooldown";
+
+function computeResumePosition(
+  planned: PlannedSession | null,
+  completedSets: CompletedSet[],
+): { phase: SessionPhase; exIdx: number; setIdx: number } {
+  const TOP = { phase: "warmup" as SessionPhase, exIdx: 0, setIdx: 0 };
+  if (!planned || completedSets.length === 0) return TOP;
+
+  const phases: { phase: SessionPhase; list: PlannedExercise[] }[] = [
+    { phase: "warmup", list: planned.warmUpExercises || [] },
+    { phase: "training", list: planned.exercises || [] },
+    { phase: "cooldown", list: planned.cooldownExercises || [] },
+  ];
+
+  // Find the exercise of the most-recently logged set.
+  const lastExId = completedSets[completedSets.length - 1].exerciseId;
+  let pi = -1;
+  let ei = -1;
+  for (let p = 0; p < phases.length; p++) {
+    const idx = phases[p].list.findIndex((e) => e.id === lastExId);
+    if (idx !== -1) { pi = p; ei = idx; break; }
+  }
+  if (pi === -1) return TOP; // unknown exercise — safest to restart at top
+
+  const ex = phases[pi].list[ei];
+  const doneForEx = completedSets.filter((cs) => cs.exerciseId === lastExId).length;
+
+  // Sets remaining on this exercise → resume mid-exercise (no re-logging).
+  if (doneForEx < ex.sets) {
+    return { phase: phases[pi].phase, exIdx: ei, setIdx: doneForEx };
+  }
+
+  // Exercise finished → advance to the next exercise, crossing phases.
+  let np = pi;
+  let ne = ei + 1;
+  while (np < phases.length) {
+    if (ne < phases[np].list.length) {
+      return { phase: phases[np].phase, exIdx: ne, setIdx: 0 };
+    }
+    np++;
+    ne = 0;
+  }
+  // Nothing after — clamp to the final set of the last logged exercise.
+  return { phase: phases[pi].phase, exIdx: ei, setIdx: Math.max(0, ex.sets - 1) };
+}
+
 // ── Main Session Screen ─────────────────────────────────────────────────────
 
 export default function SessionScreen({ navigation, route }: any) {
@@ -540,9 +622,15 @@ export default function SessionScreen({ navigation, route }: any) {
   const advanceExercise = useStore((s) => s.advanceExercise);
   const endSession = useStore((s) => s.endSession);
 
+  // MVP 1.16.1 — when resuming an in-progress session, restore where the user
+  // left off (derived once, on mount) so they continue instead of restarting.
+  const [resumeInit] = useState(() =>
+    computeResumePosition(activeSession?.plannedSession ?? null, activeSession?.completedSets ?? [])
+  );
+
   // Local UI state
-  const [currentExIdx, setCurrentExIdx] = useState(0);
-  const [currentSetIdx, setCurrentSetIdx] = useState(0);
+  const [currentExIdx, setCurrentExIdx] = useState(resumeInit.exIdx);
+  const [currentSetIdx, setCurrentSetIdx] = useState(resumeInit.setIdx);
   const [resting, setResting] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const [restTotal, setRestTotal] = useState(0);
@@ -556,7 +644,7 @@ export default function SessionScreen({ navigation, route }: any) {
   const [arnoldMsg, setArnoldMsg] = useState("Let's get after it.");
   const [chatOpen, setChatOpen] = useState(false);
   const [detailExercise, setDetailExercise] = useState<{ section: "warmUp" | "main" | "cooldown"; index: number } | null>(null);
-  const [sessionPhase, setSessionPhase] = useState<"warmup" | "training" | "cooldown">("warmup");
+  const [sessionPhase, setSessionPhase] = useState<"warmup" | "training" | "cooldown">(resumeInit.phase);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [reviewInitiated, setReviewInitiated] = useState(false);
   const [showFullWorkout, setShowFullWorkout] = useState(false);
@@ -628,17 +716,96 @@ export default function SessionScreen({ navigation, route }: any) {
     setTimeout(() => setSpeaking(false), msg.length * 35 + 600);
   }, []);
 
-  // Rest timer
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => {
-    if (resting && restTime > 0) {
-      timerRef.current = setTimeout(() => setRestTime((t) => t - 1), 1000);
-    } else if (resting && restTime === 0) {
-      setResting(false);
-      arnoldSay(`Set ${currentSetIdx + 1}. ${currentEx.name}. Go.`);
+  // ── Timer lifecycle (MVP 1.16) ────────────────────────────────────────────
+  // Source of truth is an absolute end timestamp held in a ref — NOT a
+  // decrementing counter. A 250ms tick recomputes the visible remaining from
+  // Date.now(), so the timer stays correct across backgrounding (iOS suspends
+  // JS timers within ~30s). A local OS notification is scheduled when a timer
+  // starts so it fires even if the app is closed, and is cancelled on
+  // skip / manual DONE / navigation away / natural completion.
+  const restEndsAtRef = useRef<number | null>(null);
+  const warmupEndsAtRef = useRef<number | null>(null);
+  const restNotifIdRef = useRef<string | null>(null);
+  const warmupNotifIdRef = useRef<string | null>(null);
+  // Latest completion handlers, read by the tick intervals + AppState listener
+  // so those long-lived callbacks never capture stale state.
+  const restCompleteRef = useRef<() => void>(() => {});
+  const warmupCompleteRef = useRef<() => void>(() => {});
+
+  const cancelRestNotification = () => {
+    const id = restNotifIdRef.current;
+    if (id) {
+      Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      restNotifIdRef.current = null;
     }
-    return () => clearTimeout(timerRef.current);
-  }, [resting, restTime]);
+  };
+
+  const cancelWarmupNotification = () => {
+    const id = warmupNotifIdRef.current;
+    if (id) {
+      Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+      warmupNotifIdRef.current = null;
+    }
+  };
+
+  const scheduleRestNotification = async (seconds: number, body: string) => {
+    const granted = await ensureNotificationPermission();
+    if (!granted) { restNotifIdRef.current = null; return; }
+    try {
+      restNotifIdRef.current = await Notifications.scheduleNotificationAsync({
+        content: { title: "Rest's up", body, sound: "default" },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds, repeats: false },
+      });
+    } catch {
+      restNotifIdRef.current = null;
+    }
+  };
+
+  const scheduleWarmupNotification = async (seconds: number, exName: string) => {
+    const granted = await ensureNotificationPermission();
+    if (!granted) { warmupNotifIdRef.current = null; return; }
+    try {
+      warmupNotifIdRef.current = await Notifications.scheduleNotificationAsync({
+        content: { title: `${exName} done`, body: "Next warm-up exercise", sound: "default" },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds, repeats: false },
+      });
+    } catch {
+      warmupNotifIdRef.current = null;
+    }
+  };
+
+  // Start a between-set rest: set the wall-clock end + schedule the OS notification.
+  const startRest = (seconds: number, notifBody: string) => {
+    restEndsAtRef.current = Date.now() + seconds * 1000;
+    setRestTotal(seconds);
+    setRestTime(seconds);
+    setResting(true);
+    scheduleRestNotification(seconds, notifBody);
+  };
+
+  const handleRestComplete = () => {
+    if (restEndsAtRef.current == null) return; // guard against double-fire
+    restEndsAtRef.current = null;
+    cancelRestNotification();
+    setResting(false);
+    setRestTime(0);
+    arnoldSay(`Set ${currentSetIdx + 1}. ${currentEx.name}. Go.`);
+  };
+
+  // Rest tick — recompute remaining from the wall clock every 250ms.
+  useEffect(() => {
+    if (!resting) return;
+    const tick = () => {
+      const endsAt = restEndsAtRef.current;
+      if (endsAt == null) return;
+      const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      setRestTime(remaining);
+      if (remaining <= 0) restCompleteRef.current();
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [resting]);
 
   // Auto-scroll to center current exercise
   useEffect(() => {
@@ -654,9 +821,12 @@ export default function SessionScreen({ navigation, route }: any) {
   // DONE button handler
   const handleDone = () => {
     // v2.4.5 §5.4 — clear the active warm-up countdown so the timer effect
-    // doesn't double-fire handleDone() a tick later.
+    // doesn't double-fire handleDone() a tick later. MVP 1.16: also cancel the
+    // pending warm-up notification (manual DONE short-circuits the countdown).
     setWarmupTiming(false);
     setWarmupTime(0);
+    warmupEndsAtRef.current = null;
+    cancelWarmupNotification();
 
     // v2.4.1 grouped cards (warm-up, accessory superset): one DONE press
     // advances the whole block. Sub-items aren't individually tracked.
@@ -716,9 +886,7 @@ export default function SessionScreen({ navigation, route }: any) {
       setCurrentSetIdx(0);
       const nextEx = currentPhaseExercises[currentExIdx + 1];
       if (nextEx && nextEx.restSeconds > 0) {
-        setResting(true);
-        setRestTotal(nextEx.restSeconds);
-        setRestTime(nextEx.restSeconds);
+        startRest(nextEx.restSeconds, `${nextEx.name} — set 1`);
       }
     } else {
       if (currentSetIdx === currentEx.sets - 2) {
@@ -733,14 +901,15 @@ export default function SessionScreen({ navigation, route }: any) {
       }
       setCurrentSetIdx((i) => i + 1);
       if (currentEx.restSeconds > 0) {
-        setResting(true);
-        setRestTotal(currentEx.restSeconds);
-        setRestTime(currentEx.restSeconds);
+        // currentSetIdx is pre-increment here, so the upcoming set (1-based) is +2.
+        startRest(currentEx.restSeconds, `${currentEx.name} — set ${currentSetIdx + 2}`);
       }
     }
   };
 
   const skipRest = () => {
+    restEndsAtRef.current = null;
+    cancelRestNotification();
     setResting(false);
     setRestTime(0);
     arnoldSay("No rest? Respect. Go.");
@@ -752,8 +921,12 @@ export default function SessionScreen({ navigation, route }: any) {
     if (sessionPhase !== "warmup") return;
     setWarmupTiming(false);
     setWarmupTime(0);
+    warmupEndsAtRef.current = null;
+    cancelWarmupNotification();
     const isLastExercise = currentExIdx >= currentPhaseExercises.length - 1;
     if (resting) {
+      restEndsAtRef.current = null;
+      cancelRestNotification();
       setResting(false);
       setRestTime(0);
     }
@@ -769,19 +942,38 @@ export default function SessionScreen({ navigation, route }: any) {
     }
   };
 
-  // v2.4.5 §5.4 — warm-up countdown tick. Decrements once per second; when it
-  // hits 0, auto-fires handleDone() (same path as a manual DONE tap). Placed
-  // after handleDone definition so the closure captures it without TDZ warning.
-  const warmupTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // v2.4.5 §5.4 — warm-up countdown completion. When it hits 0, auto-fires
+  // handleDone() (same path as a manual DONE tap). MVP 1.16: wall-clock based.
+  const handleWarmupComplete = () => {
+    if (warmupEndsAtRef.current == null) return; // guard against double-fire
+    warmupEndsAtRef.current = null;
+    cancelWarmupNotification();
+    setWarmupTiming(false);
+    setWarmupTime(0);
+    handleDone();
+  };
+
+  // Warm-up tick — recompute remaining from the wall clock every 250ms.
   useEffect(() => {
-    if (warmupTiming && warmupTime > 0) {
-      warmupTimerRef.current = setTimeout(() => setWarmupTime((t) => t - 1), 1000);
-    } else if (warmupTiming && warmupTime === 0) {
-      setWarmupTiming(false);
-      handleDone();
-    }
-    return () => clearTimeout(warmupTimerRef.current);
-  }, [warmupTiming, warmupTime]);
+    if (!warmupTiming) return;
+    const tick = () => {
+      const endsAt = warmupEndsAtRef.current;
+      if (endsAt == null) return;
+      const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      setWarmupTime(remaining);
+      if (remaining <= 0) warmupCompleteRef.current();
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [warmupTiming]);
+
+  // Keep the completion refs pointed at the latest handlers so the tick
+  // intervals and the AppState listener never call stale closures.
+  useEffect(() => {
+    restCompleteRef.current = handleRestComplete;
+    warmupCompleteRef.current = handleWarmupComplete;
+  });
 
   // v2.4.5 §5.4 — kick off the countdown when a warm-up set becomes active.
   // Paused while between-set rest is running (the 10s rest takes precedence).
@@ -792,15 +984,56 @@ export default function SessionScreen({ navigation, route }: any) {
     const duration = currentEx.warmupDurationSeconds;
     if (!duration || duration <= 0) return;
 
+    warmupEndsAtRef.current = Date.now() + duration * 1000;
     setWarmupTotal(duration);
     setWarmupTime(duration);
     setWarmupTiming(true);
+    // Only schedule an OS notification for longer holds. Short warm-up
+    // countdowns (<= 20s) don't give the user time to meaningfully background
+    // the app, and a buzz a few seconds after they glance away feels wrong.
+    if (duration > 20) {
+      scheduleWarmupNotification(duration, currentEx.name);
+    }
 
     return () => {
+      warmupEndsAtRef.current = null;
+      cancelWarmupNotification();
       setWarmupTiming(false);
       setWarmupTime(0);
     };
   }, [sessionPhase, currentExIdx, currentSetIdx, resting]);
+
+  // MVP 1.16 — recompute remaining the instant the app returns to foreground.
+  // iOS suspends JS timers while backgrounded, but the endsAt refs survive, so
+  // we recover the exact remaining time (and fire completion if it already
+  // elapsed while we were away).
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") return;
+      if (restEndsAtRef.current != null) {
+        const rem = Math.max(0, Math.ceil((restEndsAtRef.current - Date.now()) / 1000));
+        setRestTime(rem);
+        if (rem <= 0) restCompleteRef.current();
+      }
+      if (warmupEndsAtRef.current != null) {
+        const rem = Math.max(0, Math.ceil((warmupEndsAtRef.current - Date.now()) / 1000));
+        setWarmupTime(rem);
+        if (rem <= 0) warmupCompleteRef.current();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // MVP 1.16 — leaving the session (back button, finish, or any unmount) must
+  // cancel any pending OS notification so it doesn't fire after the user left.
+  useEffect(() => {
+    return () => {
+      cancelRestNotification();
+      cancelWarmupNotification();
+      restEndsAtRef.current = null;
+      warmupEndsAtRef.current = null;
+    };
+  }, []);
 
 
 
@@ -926,6 +1159,14 @@ export default function SessionScreen({ navigation, route }: any) {
                     onPress={() => {
                       setWarmupTiming(false);
                       setWarmupTime(0);
+                      warmupEndsAtRef.current = null;
+                      cancelWarmupNotification();
+                      if (resting) {
+                        restEndsAtRef.current = null;
+                        cancelRestNotification();
+                        setResting(false);
+                        setRestTime(0);
+                      }
                       arnoldSay("Skipping warm-up. Let's go.");
                       exerciseLayouts.current = {};
                       setSessionPhase("training");

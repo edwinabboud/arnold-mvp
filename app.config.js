@@ -11,6 +11,15 @@ export default {
     updates: {
       enabled: false,
     },
+    plugins: [
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/icon.png",
+          color: "#FF9500",
+        },
+      ],
+    ],
     splash: {
       backgroundColor: "#0A0A0B"
     },
