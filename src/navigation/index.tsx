@@ -116,6 +116,7 @@ export default function AppNavigation() {
     // read on cold start and can return null even for signed-in users —
     // which was the cold-reopen sign-out bug.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      console.log("[ARNOLD ACTIVESESSION] navigation auth event:", _event, "session:", s ? "exists" : "null");
       setSession(s);
       setAuthReady(true);
       // Reset hydration flag on sign-out so next sign-in re-hydrates

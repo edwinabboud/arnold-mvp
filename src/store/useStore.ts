@@ -242,6 +242,7 @@ export const useStore = create<ArnoldStore>()(
       activeSession: null,
 
       startSession: (planned, warmUp) => {
+        console.log("[ARNOLD ACTIVESESSION] startSession called, will overwrite existing:", !!get().activeSession);
         // Close the autoregulation loop. The user's feedback was about how
         // the MAIN working set felt. Apply the queued delta to the main
         // exercise, then scale every other exercise sharing the same
@@ -342,7 +343,8 @@ export const useStore = create<ArnoldStore>()(
         });
       },
 
-      logSet: (completedSet) =>
+      logSet: (completedSet) => {
+        console.log("[ARNOLD ACTIVESESSION] logSet called, exId:", completedSet.exerciseId, "setNum:", completedSet.setNumber);
         set((s) => {
           if (!s.activeSession) return s;
           return {
@@ -353,7 +355,8 @@ export const useStore = create<ArnoldStore>()(
               isResting: true,
             },
           };
-        }),
+        });
+      },
 
       logPain: (pain) =>
         set((s) => {
@@ -644,6 +647,7 @@ export const useStore = create<ArnoldStore>()(
       clearAdaptationQueue: () => set({ adaptationQueue: createEmptyQueue() }),
 
       resetStore: () => {
+        console.log("[ARNOLD ACTIVESESSION] activeSession being set to null by resetStore. Stack:", new Error().stack);
         set({
           profile: null,
           onboarding: initialOnboarding,
@@ -659,6 +663,7 @@ export const useStore = create<ArnoldStore>()(
         });
       },
       resetForAccountDeletion: () => {
+        console.log("[ARNOLD ACTIVESESSION] activeSession being set to null by resetForAccountDeletion. Stack:", new Error().stack);
         set({
           profile: null,
           onboarding: initialOnboarding,
@@ -689,6 +694,18 @@ export const useStore = create<ArnoldStore>()(
         adaptationQueue: state.adaptationQueue,
         lastAppliedAdjustments: state.lastAppliedAdjustments,
       }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.log("[ARNOLD ACTIVESESSION] rehydration ERROR:", error);
+        } else {
+          console.log(
+            "[ARNOLD ACTIVESESSION] rehydrated from disk. activeSession exists:",
+            !!state?.activeSession,
+            "completedSets count:",
+            state?.activeSession?.completedSets?.length ?? "N/A",
+          );
+        }
+      },
     }
   )
 );

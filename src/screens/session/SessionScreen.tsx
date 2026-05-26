@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import * as Notifications from "expo-notifications";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { useStore } from "../../store/useStore";
 import { colors, typography, spacing, radius } from "../../theme";
 import {
@@ -1009,20 +1010,49 @@ export default function SessionScreen({ navigation, route }: any) {
   // elapsed while we were away).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
+      console.log("[ARNOLD TIMER] AppState change:", next, "restEndsAt:", restEndsAtRef.current, "warmupEndsAt:", warmupEndsAtRef.current);
       if (next !== "active") return;
       if (restEndsAtRef.current != null) {
         const rem = Math.max(0, Math.ceil((restEndsAtRef.current - Date.now()) / 1000));
+        console.log("[ARNOLD TIMER] AppState active: recomputed rest remaining:", rem);
         setRestTime(rem);
         if (rem <= 0) restCompleteRef.current();
       }
       if (warmupEndsAtRef.current != null) {
         const rem = Math.max(0, Math.ceil((warmupEndsAtRef.current - Date.now()) / 1000));
+        console.log("[ARNOLD TIMER] AppState active: recomputed warmup remaining:", rem);
         setWarmupTime(rem);
         if (rem <= 0) warmupCompleteRef.current();
       }
     });
     return () => sub.remove();
   }, []);
+
+  // MVP 1.16.2 — belt-and-suspenders for AppState miss. On iOS the JS engine
+  // can be fully suspended when backgrounded; the AppState "active" event after
+  // foregrounding can be missed. useFocusEffect fires reliably when the screen
+  // regains focus via React Navigation, giving us a second recompute trigger.
+  // (The tick interval keyed on `resting`/`warmupTiming` keeps owning the
+  // per-second cadence; this just nudges remaining the instant we're visible.)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log("[ARNOLD TIMER] useFocusEffect fired. resting:", resting, "warmupTiming:", warmupTiming);
+      if (restEndsAtRef.current != null) {
+        const rem = Math.max(0, Math.ceil((restEndsAtRef.current - Date.now()) / 1000));
+        console.log("[ARNOLD TIMER] Focus recompute rest remaining:", rem);
+        setRestTime(rem);
+        if (rem <= 0) restCompleteRef.current();
+      }
+      if (warmupEndsAtRef.current != null) {
+        const rem = Math.max(0, Math.ceil((warmupEndsAtRef.current - Date.now()) / 1000));
+        console.log("[ARNOLD TIMER] Focus recompute warmup remaining:", rem);
+        setWarmupTime(rem);
+        if (rem <= 0) warmupCompleteRef.current();
+      }
+      // No cleanup needed — recompute is fire-once on focus. The existing tick
+      // effect (keyed on `resting`/`warmupTiming`) owns the interval lifecycle.
+    }, [resting, warmupTiming])
+  );
 
   // MVP 1.16 — leaving the session (back button, finish, or any unmount) must
   // cancel any pending OS notification so it doesn't fire after the user left.

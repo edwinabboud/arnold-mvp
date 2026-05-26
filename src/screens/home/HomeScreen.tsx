@@ -132,6 +132,13 @@ export default function HomeScreen({ navigation }: any) {
     navigation.getParent()?.navigate("Session");
   };
 
+  // MVP 1.16.2 — diagnostic for the "no Resume button after hard close" bug.
+  // Logs every time HomeScreen mounts or these values change so we can verify
+  // what activeSession looks like across cold start / rehydration.
+  useEffect(() => {
+    console.log("[ARNOLD ACTIVESESSION] HomeScreen mount/update: activeSession exists?", !!activeSession, "isResumable?", isResumable);
+  }, [activeSession, isResumable]);
+
   const handleDevReset = () => {
     Alert.alert(
       "Reset all state?",
