@@ -687,6 +687,11 @@ export const useStore = create<ArnoldStore>()(
         onboarding: state.onboarding,
         activeMesocycle: state.activeMesocycle,
         userProgressions: state.userProgressions,
+        // MVP 1.16.3 — persist activeSession so a session in progress survives
+        // a hard close + cold start. HomeScreen's 24h stale rule prevents an
+        // abandoned session from offering Resume indefinitely; endSession
+        // already clears activeSession to null on completion.
+        activeSession: state.activeSession,
         streaks: state.streaks,
         lastStreakCheckWeek: state.lastStreakCheckWeek,
         weeklyDrops: state.weeklyDrops,
