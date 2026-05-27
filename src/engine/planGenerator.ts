@@ -14,6 +14,7 @@ import {
   PlannedExercise,
   PlannedSession,
   Schedule,
+  SessionLog,
   TrainingGoal,
   UserProgression,
 } from "../types";
@@ -731,4 +732,58 @@ function getSupportingExercise(
 
   const supportIdx = Math.max(0, mainIdx - 2);
   return tree[supportIdx];
+}
+
+// ── Schedule rebalancing (MVP 1.17) ─────────────────────────────────────────
+
+/**
+ * Rebalance a mesocycle's session calendar when the user changes their
+ * training schedule post-onboarding.
+ *
+ * For each week, completed sessions retain their original `dayOfWeek`
+ * (history is immutable, matched via `sessionHistory.plannedSessionId`).
+ * Uncompleted sessions are sliced to the new `daysPerWeek` cap and
+ * reassigned to `preferredDays` slots in order.
+ *
+ * **Decrease (e.g. 3 → 2 days/week):** uncompleted sessions beyond the
+ * new cap are silently dropped. The spec'd Plan Realignment dialog
+ * (v2.4 §4.5.3) would give the user a Compress/Drop/Extend choice
+ * instead, but that's post-MVP.
+ *
+ * **Increase (e.g. 2 → 4 days/week) — caveat:** this function does NOT
+ * create new sessions. If the existing mesocycle was generated at 2
+ * days/week (each week has 2 sessions), raising to 4 places those 2
+ * sessions on the first 2 preferred days; the other preferred days
+ * stay empty until the next mesocycle generation. True "fill extra
+ * slots" requires path-aware new-session creation (generator territory)
+ * and is deferred.
+ */
+export function rebalanceMesocycleToSchedule(
+  mesocycle: Mesocycle,
+  newSchedule: Schedule,
+  sessionHistory: SessionLog[],
+): Mesocycle {
+  const completedIds = new Set(sessionHistory.map((h) => h.plannedSessionId));
+  const newDays = [...newSchedule.preferredDays].sort((a, b) => a - b);
+
+  return {
+    ...mesocycle,
+    weeks: mesocycle.weeks.map((week) => {
+      const completed = week.sessions.filter((s) => completedIds.has(s.id));
+      const uncompleted = week.sessions.filter((s) => !completedIds.has(s.id));
+
+      // Cap uncompleted at the new daysPerWeek; anything past that is dropped.
+      const kept = uncompleted.slice(0, newSchedule.daysPerWeek);
+
+      const rebalanced = kept.map((s, i) => ({
+        ...s,
+        dayOfWeek: newDays[i] ?? s.dayOfWeek,
+      }));
+
+      return {
+        ...week,
+        sessions: [...completed, ...rebalanced],
+      };
+    }),
+  };
 }
