@@ -63,6 +63,7 @@ export default function HomeScreen({ navigation }: any) {
   const streaks = useStore((s) => s.streaks);
   const activeMesocycle = useStore((s) => s.activeMesocycle);
   const startSession = useStore((s) => s.startSession);
+  const activeSession = useStore((s) => s.activeSession);
   const sessionHistory = useStore((s) => s.sessionHistory);
   const adaptationQueue = useStore((s) => s.adaptationQueue);
   const lastAppliedAdjustments = useStore((s) => s.lastAppliedAdjustments);
@@ -110,6 +111,33 @@ export default function HomeScreen({ navigation }: any) {
     startSession(sessionInfo.session, "long");
     navigation.getParent()?.navigate("Session");
   };
+
+  // MVP 1.16.1 — resume an in-progress session instead of clobbering it.
+  // activeSession is persisted (Zustand partialize), so it survives leaving the
+  // Session screen and even an app restart. Offer Resume only when the active
+  // session matches today's session AND was started within the last 24h.
+  // A staler session falls through to the normal Start flow, whose
+  // startSession() naturally overwrites it on the next tap.
+  const STALE_HOURS = 24;
+  const isResumable = (() => {
+    if (!activeSession || !sessionInfo) return false;
+    if (activeSession.plannedSession.id !== sessionInfo.session.id) return false;
+    const hoursAgo = (Date.now() - new Date(activeSession.startedAt).getTime()) / (1000 * 60 * 60);
+    return hoursAgo <= STALE_HOURS;
+  })();
+
+  const handleResumeSession = () => {
+    // Do NOT call startSession() — it creates a fresh ActiveSession and would
+    // wipe in-progress state. SessionScreen reads activeSession from the store.
+    navigation.getParent()?.navigate("Session");
+  };
+
+  // MVP 1.16.2 — diagnostic for the "no Resume button after hard close" bug.
+  // Logs every time HomeScreen mounts or these values change so we can verify
+  // what activeSession looks like across cold start / rehydration.
+  useEffect(() => {
+    console.log("[ARNOLD ACTIVESESSION] HomeScreen mount/update: activeSession exists?", !!activeSession, "isResumable?", isResumable);
+  }, [activeSession, isResumable]);
 
   const handleDevReset = () => {
     Alert.alert(
@@ -308,7 +336,7 @@ export default function HomeScreen({ navigation }: any) {
           <View style={styles.headerTopRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.greeting}>
-                {sessionInfo?.isToday ? "Ready to train" : "Rest & recover"}
+                {isResumable ? "Pick up where you left off" : sessionInfo?.isToday ? "Ready to train" : "Rest & recover"}
               </Text>
               <Text style={styles.title}>Arnold</Text>
             </View>
@@ -509,10 +537,11 @@ export default function HomeScreen({ navigation }: any) {
               styles.sessionCard,
               !sessionInfo.isToday && { borderColor: colors.border },
               sessionInfo.isCompleted && { borderColor: "#34C75930" },
+              isResumable && { backgroundColor: "rgba(245,166,35,0.06)", borderColor: colors.accent },
             ]}
             activeOpacity={0.8}
-            onPress={!sessionInfo.isCompleted ? handleStartSession : undefined}
-            onLongPress={!sessionInfo.isCompleted ? () => setSwapModalOpen(true) : undefined}
+            onPress={!sessionInfo.isCompleted ? (isResumable ? handleResumeSession : handleStartSession) : undefined}
+            onLongPress={!sessionInfo.isCompleted && !isResumable ? () => setSwapModalOpen(true) : undefined}
             delayLongPress={350}
           >
             <View style={[
@@ -526,7 +555,7 @@ export default function HomeScreen({ navigation }: any) {
                 !sessionInfo.isToday && { color: colors.textSecondary },
                 sessionInfo.isCompleted && { color: "#34C759" },
               ]}>
-                {sessionInfo.isCompleted ? "COMPLETED ✓" : sessionInfo.isToday ? "TODAY" : "REST DAY"}
+                {sessionInfo.isCompleted ? "COMPLETED ✓" : isResumable ? "IN PROGRESS" : sessionInfo.isToday ? "TODAY" : "REST DAY"}
               </Text>
             </View>
             <Text style={styles.sessionTitle}>{sessionInfo.session.label}</Text>
@@ -548,8 +577,13 @@ export default function HomeScreen({ navigation }: any) {
             {!sessionInfo.isCompleted && (
               <View style={styles.startRow}>
                 <Text style={styles.startText}>
-                  {sessionInfo.isToday ? "Start Session →" : "Train anyway →"}
+                  {isResumable ? "Resume session →" : sessionInfo.isToday ? "Start Session →" : "Train anyway →"}
                 </Text>
+                {isResumable && (
+                  <Text style={styles.resumeSubtext}>
+                    {activeSession!.completedSets.length} {activeSession!.completedSets.length === 1 ? "set" : "sets"} logged so far
+                  </Text>
+                )}
               </View>
             )}
             {sessionInfo.isCompleted && (
@@ -779,6 +813,12 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     fontWeight: "700",
     color: colors.accent,
+  },
+  resumeSubtext: {
+    fontSize: typography.sizes.sm,
+    color: colors.textMuted,
+    fontWeight: "500",
+    marginTop: 2,
   },
   // Cascade pill
   cascadePill: {
