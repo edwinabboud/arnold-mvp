@@ -23,6 +23,7 @@ import {
 } from "../types";
 import { processSessionForAdaptation } from "../engine/silentAdaptation";
 import { applyAdaptationDecisions } from "../engine/applyAdaptation";
+import { rebalanceMesocycleToSchedule } from "../engine/planGenerator";
 import { syncProfile, syncMesocycle, syncProgressions, syncStreaks, syncSessionLog } from '../services/supabaseSync';
 import {
   AdaptationQueue,
@@ -65,6 +66,9 @@ interface ArnoldStore {
   // User
   profile: UserProfile | null;
   setProfile: (profile: UserProfile) => void;
+  /** Granular schedule-only update — preserves the rest of profile, rebalances
+   *  uncompleted mesocycle sessions to the new preferredDays/daysPerWeek. */
+  setProfileSchedule: (schedule: Schedule) => void;
 
   // Onboarding
   onboarding: OnboardingState;
@@ -172,6 +176,29 @@ export const useStore = create<ArnoldStore>()(
       setProfile: (profile) => {
         set({ profile });
         bgSync(() => syncProfile(profile));
+      },
+
+      // MVP 1.17 — schedule editing post-onboarding. Updates profile.schedule,
+      // rebalances the active mesocycle's uncompleted sessions to the new
+      // preferredDays, and syncs both. Completed sessions are preserved
+      // (history is immutable, identified via sessionHistory).
+      setProfileSchedule: (schedule) => {
+        set((s) => {
+          if (!s.profile) return s;
+          return { profile: { ...s.profile, schedule } };
+        });
+        const state = get();
+        if (state.activeMesocycle) {
+          const rebalanced = rebalanceMesocycleToSchedule(
+            state.activeMesocycle,
+            schedule,
+            state.sessionHistory,
+          );
+          set({ activeMesocycle: rebalanced });
+          bgSync(() => syncMesocycle(rebalanced));
+        }
+        const finalProfile = get().profile;
+        if (finalProfile) bgSync(() => syncProfile(finalProfile));
       },
 
       // ── Onboarding ──────────────────────────────────────────────────────

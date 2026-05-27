@@ -18,7 +18,9 @@ import Constants from "expo-constants";
 import { colors, typography, spacing, radius } from "../../theme";
 import { supabase } from "../../config/supabase";
 import DeleteAccountDialog from "./DeleteAccountDialog";
+import EditScheduleSheet from "./EditScheduleSheet";
 import { DISCLAIMER_PARAGRAPH_1, DISCLAIMER_PARAGRAPH_2 } from "../../components/DisclaimerModal";
+import { useStore } from "../../store/useStore";
 
 type Placeholder = "terms" | "privacy" | "disclaimers" | null;
 
@@ -26,6 +28,9 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
   const [email, setEmail] = useState<string>("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [placeholder, setPlaceholder] = useState<Placeholder>(null);
+  const [editScheduleOpen, setEditScheduleOpen] = useState(false);
+  const profile = useStore((s) => s.profile);
+  const schedule = profile?.schedule;
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -66,6 +71,27 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
           </TouchableOpacity>
         </View>
 
+        {schedule && (
+          <>
+            <Text style={styles.sectionHeader}>TRAINING</Text>
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => setEditScheduleOpen(true)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.rowLabel}>Training schedule</Text>
+                <View style={styles.rowValueGroup}>
+                  <Text style={styles.rowValue}>
+                    {schedule.daysPerWeek} day{schedule.daysPerWeek > 1 ? "s" : ""}/week
+                  </Text>
+                  <Text style={styles.rowChevron}>›</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         <Text style={styles.sectionHeader}>ABOUT</Text>
         <View style={styles.section}>
           <View style={styles.row}>
@@ -91,6 +117,14 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
       </ScrollView>
 
       <DeleteAccountDialog visible={deleteOpen} onCancel={() => setDeleteOpen(false)} />
+
+      {schedule && (
+        <EditScheduleSheet
+          visible={editScheduleOpen}
+          initialSchedule={schedule}
+          onClose={() => setEditScheduleOpen(false)}
+        />
+      )}
 
       <Modal
         visible={placeholder !== null}
@@ -201,6 +235,11 @@ const styles = StyleSheet.create({
   rowChevron: {
     fontSize: typography.sizes.lg,
     color: colors.textMuted,
+  },
+  rowValueGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
   divider: {
     height: 1,
