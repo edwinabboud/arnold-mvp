@@ -19,16 +19,27 @@ import { colors, typography, spacing, radius } from "../../theme";
 import { supabase } from "../../config/supabase";
 import DeleteAccountDialog from "./DeleteAccountDialog";
 import EditScheduleSheet from "./EditScheduleSheet";
+import SessionTierSheet from "./SessionTierSheet";
 import { DISCLAIMER_PARAGRAPH_1, DISCLAIMER_PARAGRAPH_2 } from "../../components/DisclaimerModal";
 import { useStore } from "../../store/useStore";
+import type { SessionTier } from "../../types";
 
 type Placeholder = "terms" | "privacy" | "disclaimers" | null;
+
+function tierDisplayName(tier: SessionTier): string {
+  switch (tier) {
+    case "compact": return "Compact (~40 min)";
+    case "standard": return "Standard (~60 min)";
+    case "recommended": return "Recommended (~90 min)";
+  }
+}
 
 export default function SettingsScreen({ navigation }: { navigation: { goBack: () => void } }) {
   const [email, setEmail] = useState<string>("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [placeholder, setPlaceholder] = useState<Placeholder>(null);
   const [editScheduleOpen, setEditScheduleOpen] = useState(false);
+  const [editTierOpen, setEditTierOpen] = useState(false);
   const profile = useStore((s) => s.profile);
   const schedule = profile?.schedule;
 
@@ -88,6 +99,18 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
                   <Text style={styles.rowChevron}>›</Text>
                 </View>
               </TouchableOpacity>
+              <View style={styles.divider} />
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => setEditTierOpen(true)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.rowLabel}>Session length</Text>
+                <View style={styles.rowValueGroup}>
+                  <Text style={styles.rowValue}>{tierDisplayName(schedule.sessionTier)}</Text>
+                  <Text style={styles.rowChevron}>›</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -119,11 +142,18 @@ export default function SettingsScreen({ navigation }: { navigation: { goBack: (
       <DeleteAccountDialog visible={deleteOpen} onCancel={() => setDeleteOpen(false)} />
 
       {schedule && (
-        <EditScheduleSheet
-          visible={editScheduleOpen}
-          initialSchedule={schedule}
-          onClose={() => setEditScheduleOpen(false)}
-        />
+        <>
+          <EditScheduleSheet
+            visible={editScheduleOpen}
+            initialSchedule={schedule}
+            onClose={() => setEditScheduleOpen(false)}
+          />
+          <SessionTierSheet
+            visible={editTierOpen}
+            initialTier={schedule.sessionTier}
+            onClose={() => setEditTierOpen(false)}
+          />
+        </>
       )}
 
       <Modal

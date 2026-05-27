@@ -14,6 +14,7 @@ import {
   Schedule,
   UserProgression,
 } from "../../types";
+import { applyTierCutsToMesocycle } from "../planGenerator";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { generateStreetLifterBeginner } from "./streetLifterBeginner";
 
@@ -70,8 +71,12 @@ export function generateHybridAthleteBeginner(
   schedule: Schedule,
   progressions: UserProgression[],
 ): Mesocycle {
-  // Generate the Street Lifter base mesocycle
-  const base = generateStreetLifterBeginner(userId, schedule, progressions);
+  // Generate the Street Lifter base mesocycle.
+  // MVP 1.18: force the inner Street Lifter base to "recommended" so its
+  // per-path cuts are a no-op. Hybrid-path cuts get applied to the final
+  // mesocycle at the end of this function — avoids double-cuts.
+  const baseSchedule: Schedule = { ...schedule, sessionTier: "recommended" };
+  const base = generateStreetLifterBeginner(userId, baseSchedule, progressions);
 
   const lsitId = getLsitId(progressions);
   const lsitName = getName(lsitId);
@@ -144,10 +149,11 @@ export function generateHybridAthleteBeginner(
   }
 
   // Override metadata to Hybrid Athlete
-  return {
+  const mesocycle: Mesocycle = {
     ...base,
     id: `meso_hyb_beg_${Date.now()}`,
     programPath: "hybrid_athlete",
     tier: "beginner",
   };
+  return applyTierCutsToMesocycle(mesocycle, schedule.sessionTier ?? "recommended", "hybrid_athlete");
 }

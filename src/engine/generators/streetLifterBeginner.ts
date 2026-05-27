@@ -15,6 +15,7 @@ import {
   Schedule,
   UserProgression,
 } from "../../types";
+import { applyTierCutsToMesocycle } from "../planGenerator";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
@@ -396,7 +397,7 @@ export function generateStreetLifterBeginner(
     }
   }
 
-  return {
+  const mesocycle: Mesocycle = {
     id: mesoId,
     userId,
     createdAt: new Date().toISOString(),
@@ -406,4 +407,5 @@ export function generateStreetLifterBeginner(
     weeks,
     status: "active",
   };
+  return applyTierCutsToMesocycle(mesocycle, schedule.sessionTier ?? "recommended", "street_lifter");
 }

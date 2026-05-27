@@ -17,6 +17,7 @@ import {
   UserBenchmarks,
   UserProgression,
 } from "../../types";
+import { applyTierCutsToMesocycle } from "../planGenerator";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { buildE1RMProfile, getTargetWeight, E1RMProfile } from "../weightEngine";
@@ -646,7 +647,7 @@ export function generateHybridAthleteIntermediate(
     }
   }
 
-  return {
+  const mesocycle: Mesocycle = {
     id: mesoId,
     userId,
     createdAt: new Date().toISOString(),
@@ -656,4 +657,5 @@ export function generateHybridAthleteIntermediate(
     weeks,
     status: "active",
   };
+  return applyTierCutsToMesocycle(mesocycle, schedule.sessionTier ?? "recommended", "hybrid_athlete");
 }
