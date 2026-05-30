@@ -74,6 +74,16 @@ export interface ChatMessage {
   source: "quick" | "rules" | "llm";
   /** Has the user interacted with the options? */
   optionSelected?: string;
+  /**
+   * v2.4.8 §5 input-mode hint. Drives whether the chat composer is visible
+   * while this message is awaiting a response.
+   * - `"open"`           — chips (if any) + free-text. Default when omitted.
+   * - `"hybrid"`         — open-text question with quick chips, free-text
+   *                        still visible (§5.2 review default).
+   * - `"tappable_only"`  — pure tappable per §5.1 (RPE scale, pain severity,
+   *                        approval). Composer hidden until a chip is tapped.
+   */
+  inputMode?: "open" | "hybrid" | "tappable_only";
 }
 
 /** Post-session feedback flow state */
