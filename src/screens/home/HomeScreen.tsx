@@ -136,7 +136,9 @@ export default function HomeScreen({ navigation }: any) {
   // Logs every time HomeScreen mounts or these values change so we can verify
   // what activeSession looks like across cold start / rehydration.
   useEffect(() => {
-    console.log("[ARNOLD ACTIVESESSION] HomeScreen mount/update: activeSession exists?", !!activeSession, "isResumable?", isResumable);
+    if (__DEV__) {
+      console.log("[ARNOLD ACTIVESESSION] HomeScreen mount/update: activeSession exists?", !!activeSession, "isResumable?", isResumable);
+    }
   }, [activeSession, isResumable]);
 
   const handleDevReset = () => {

@@ -301,7 +301,9 @@ export const useStore = create<ArnoldStore>()(
       activeSession: null,
 
       startSession: (planned, warmUp) => {
-        console.log("[ARNOLD ACTIVESESSION] startSession called, will overwrite existing:", !!get().activeSession);
+        if (__DEV__) {
+          console.log("[ARNOLD ACTIVESESSION] startSession called, will overwrite existing:", !!get().activeSession);
+        }
         // Close the autoregulation loop. The user's feedback was about how
         // the MAIN working set felt. Apply the queued delta to the main
         // exercise, then scale every other exercise sharing the same
@@ -403,7 +405,9 @@ export const useStore = create<ArnoldStore>()(
       },
 
       logSet: (completedSet) => {
-        console.log("[ARNOLD ACTIVESESSION] logSet called, exId:", completedSet.exerciseId, "setNum:", completedSet.setNumber);
+        if (__DEV__) {
+          console.log("[ARNOLD ACTIVESESSION] logSet called, exId:", completedSet.exerciseId, "setNum:", completedSet.setNumber);
+        }
         set((s) => {
           if (!s.activeSession) return s;
           return {
@@ -706,7 +710,9 @@ export const useStore = create<ArnoldStore>()(
       clearAdaptationQueue: () => set({ adaptationQueue: createEmptyQueue() }),
 
       resetStore: () => {
-        console.log("[ARNOLD ACTIVESESSION] activeSession being set to null by resetStore. Stack:", new Error().stack);
+        if (__DEV__) {
+          console.log("[ARNOLD ACTIVESESSION] activeSession being set to null by resetStore. Stack:", new Error().stack);
+        }
         set({
           profile: null,
           onboarding: initialOnboarding,
@@ -722,7 +728,9 @@ export const useStore = create<ArnoldStore>()(
         });
       },
       resetForAccountDeletion: () => {
-        console.log("[ARNOLD ACTIVESESSION] activeSession being set to null by resetForAccountDeletion. Stack:", new Error().stack);
+        if (__DEV__) {
+          console.log("[ARNOLD ACTIVESESSION] activeSession being set to null by resetForAccountDeletion. Stack:", new Error().stack);
+        }
         set({
           profile: null,
           onboarding: initialOnboarding,
@@ -759,20 +767,23 @@ export const useStore = create<ArnoldStore>()(
         lastAppliedAdjustments: state.lastAppliedAdjustments,
       }),
       onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          console.log("[ARNOLD ACTIVESESSION] rehydration ERROR:", error);
-        } else {
-          // v2.4.7 (MVP 1.18) — migrate legacy schedules to have sessionTier.
-          if (state?.profile?.schedule && !state.profile.schedule.sessionTier) {
-            state.profile.schedule.sessionTier = "recommended";
-            console.log("[ARNOLD MIGRATE] sessionTier defaulted to 'recommended' on rehydrate");
+        if (__DEV__) {
+          if (error) {
+            console.log("[ARNOLD ACTIVESESSION] rehydration ERROR:", error);
+          } else {
+            console.log(
+              "[ARNOLD ACTIVESESSION] rehydrated from disk. activeSession exists:",
+              !!state?.activeSession,
+              "completedSets count:",
+              state?.activeSession?.completedSets?.length ?? "N/A",
+            );
           }
-          console.log(
-            "[ARNOLD ACTIVESESSION] rehydrated from disk. activeSession exists:",
-            !!state?.activeSession,
-            "completedSets count:",
-            state?.activeSession?.completedSets?.length ?? "N/A",
-          );
+        }
+        // v2.4.7 (MVP 1.18) migration — runs in production. The diagnostic
+        // [ARNOLD MIGRATE] log was dropped per MVP 1.18.1 cleanup; the field
+        // is still backfilled the same way.
+        if (state?.profile?.schedule && !state.profile.schedule.sessionTier) {
+          state.profile.schedule.sessionTier = "recommended";
         }
       },
     }
