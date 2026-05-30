@@ -13,8 +13,10 @@ import {
   PlanWeek,
   PlannedExercise,
   PlannedSession,
+  ProgramPath,
   Schedule,
   SessionLog,
+  SessionTier,
   TrainingGoal,
   UserProgression,
 } from "../types";
@@ -785,5 +787,154 @@ export function rebalanceMesocycleToSchedule(
         sessions: [...completed, ...rebalanced],
       };
     }),
+  };
+}
+
+// ── Session Tier Cuts (v2.4.7 — MVP 1.18) ───────────────────────────────────
+
+/**
+ * Apply session-tier cut rules to a fully-built `PlannedSession`. The cut
+ * tables live in spec amendment v2.4.7 §"Per-Path Cut Rules" and are the
+ * single source of truth for what gets kept vs. dropped per tier.
+ *
+ * **Amendment summary (faithful to v2.4.7 tables):**
+ * - Recommended → no cuts (returns session unchanged).
+ * - Compact / Standard → warm-up section sliced to 3 exercises.
+ * - Per path, drop/reduce specific roles in the main `exercises` array:
+ *
+ * | Path           | Compact drops                              | Standard drops |
+ * |----------------|--------------------------------------------|----------------|
+ * | street_lifter  | finisher + 2nd-and-later accessory          | finisher       |
+ * | skill_builder  | finisher + all accessory + complementary −1 set | finisher  |
+ * | hybrid_athlete | finisher (conditioning) + 2nd-and-later acc | finisher       |
+ *
+ * **Reconciliations made during implementation (documented per Edwin):**
+ * 1. `PlannedSession` field names are `warmUpExercises` and `exercises`
+ *    (not `warmUp` / `main` as the original prompt sketch wrote).
+ * 2. The amendment's "Conditioning block" (Hybrid) maps to the `finisher`
+ *    role — that's how `hybridAthleteIntermediate.ts` tags its conditioning.
+ * 3. Slots not named in a path's table (e.g. Street Lifter `volume`, all
+ *    paths' `skill` / `skill_practice` / `skill_isometric`) are **always
+ *    kept** regardless of tier.
+ * 4. `ramp_up` (main-lift warm-up sets) is **NEVER cut**, regardless of
+ *    tier — non-negotiable per v2.4.5 + v2.4.7 injury-prevention principle.
+ *    No filter targets `ramp_up`, so it survives by construction.
+ * 5. `endurance` path has no amendment table — only the warm-up-to-3 slice
+ *    applies; main exercises pass through untouched.
+ * 6. Hybrid Athlete *Beginner* isn't named in the amendment's path list
+ *    (only Intermediate is). Per Edwin's directive it's wired anyway;
+ *    its session structure happens to be skill-heavy so most rules are
+ *    no-ops on its output. Fine — the function is path-keyed, not
+ *    tier-named, so applying cuts to a skill-only session just slices
+ *    the warm-up.
+ *
+ * **⚠️ Known limitation — one-way ratchet:** This function is the *only*
+ * mutation point. Once cuts are applied to a session, the dropped
+ * exercises and reduced sets are gone — there's no "original full" copy
+ * to restore from. Concretely:
+ * - Recommended → Compact: cuts apply ✓
+ * - Compact → Recommended: re-running with "recommended" is a no-op
+ *   (`if (tier === "recommended") return session`), so the already-cut
+ *   sessions stay cut. The user **won't see the longer tier take effect
+ *   until the next mesocycle is generated.** This is acceptable for MVP
+ *   1.18 because the alternative (re-call path-specific generator with
+ *   preserved completed-session IDs) is substantially more invasive.
+ *   Spec chat should fold this into v2.4.7's "deferred" list.
+ *
+ * @param session immutable input; a new session is returned.
+ * @param tier read from `profile.schedule.sessionTier`.
+ * @param path read from `profile.programPath`; in generators it's hardcoded
+ *             per file (e.g. `"street_lifter"`).
+ */
+export function applyCutsForTier(
+  session: PlannedSession,
+  tier: SessionTier,
+  path: ProgramPath,
+): PlannedSession {
+  if (tier === "recommended") return session;
+
+  // 1. Warm-up section: cap at 3 exercises for Compact / Standard. Grouped
+  //    warm-up cards (subExercises[]) are also capped at 3 sub-items.
+  let warmUpExercises = session.warmUpExercises.length > 3
+    ? session.warmUpExercises.slice(0, 3)
+    : session.warmUpExercises;
+  warmUpExercises = warmUpExercises.map((ex) => {
+    if (ex.subExercises && ex.subExercises.length > 3) {
+      return { ...ex, subExercises: ex.subExercises.slice(0, 3) };
+    }
+    return ex;
+  });
+
+  // 2. Main-section cuts per path. `ramp_up`, `main`, `volume`, `skill*`,
+  //    `complementary` (except SB compact set-reduction) are untouched.
+  let exercises = [...session.exercises];
+
+  if (path === "street_lifter") {
+    exercises = exercises.filter((ex) => ex.exerciseRole !== "finisher");
+    if (tier === "compact") {
+      let accSeen = 0;
+      exercises = exercises.filter((ex) => {
+        if (ex.exerciseRole !== "accessory") return true;
+        accSeen += 1;
+        return accSeen <= 1; // keep first accessory, drop the rest
+      });
+    }
+  } else if (path === "skill_builder") {
+    exercises = exercises.filter((ex) => ex.exerciseRole !== "finisher");
+    if (tier === "compact") {
+      // Drop prehab accessory exercises entirely (the "accessory" role).
+      exercises = exercises.filter((ex) => ex.exerciseRole !== "accessory");
+      // Complementary lift: 1 set fewer.
+      exercises = exercises.map((ex) => {
+        if (ex.exerciseRole === "complementary" && ex.sets > 1) {
+          return { ...ex, sets: ex.sets - 1 };
+        }
+        return ex;
+      });
+    }
+  } else if (path === "hybrid_athlete") {
+    // Amendment's "Conditioning block" maps to the finisher role in Hybrid.
+    exercises = exercises.filter((ex) => ex.exerciseRole !== "finisher");
+    if (tier === "compact") {
+      let accSeen = 0;
+      exercises = exercises.filter((ex) => {
+        if (ex.exerciseRole !== "accessory") return true;
+        accSeen += 1;
+        return accSeen <= 1;
+      });
+    }
+  }
+  // path === "endurance": no amendment table; only warm-up slice applies.
+
+  return { ...session, warmUpExercises, exercises };
+}
+
+/**
+ * Walk every session in a mesocycle, applying `applyCutsForTier` to each.
+ *
+ * - At fresh generation (no completed sessions): pass `completedIds` as
+ *   `undefined` so cuts apply to every session.
+ * - On mid-mesocycle tier switch: pass `completedIds` to preserve already-
+ *   logged sessions immutably (history isn't rewritten); only uncompleted
+ *   sessions get re-cut.
+ *
+ * **Inherits the ratchet limitation** of `applyCutsForTier` — calling this
+ * on a previously-cut mesocycle to UPGRADE tier (e.g. compact → recommended)
+ * does not restore dropped exercises. See `applyCutsForTier` JSDoc.
+ */
+export function applyTierCutsToMesocycle(
+  meso: Mesocycle,
+  tier: SessionTier,
+  path: ProgramPath,
+  completedIds?: Set<string>,
+): Mesocycle {
+  return {
+    ...meso,
+    weeks: meso.weeks.map((week) => ({
+      ...week,
+      sessions: week.sessions.map((s) =>
+        completedIds?.has(s.id) ? s : applyCutsForTier(s, tier, path),
+      ),
+    })),
   };
 }

@@ -26,6 +26,7 @@ import {
   UserBenchmarks,
   UserProgression,
 } from "../../types";
+import { applyTierCutsToMesocycle } from "../planGenerator";
 import { PROGRESSIONS, getProgressionTree } from "../../data/progressions";
 import { ACCESSORIES } from "../data/accessories";
 import { derivePatternsFromExercises } from "../../utils/sessionPatterns";
@@ -675,7 +676,7 @@ export function generateSkillBuilderIntermediate(
     }
   }
 
-  return {
+  const mesocycle: Mesocycle = {
     id: mesoId,
     userId,
     createdAt: new Date().toISOString(),
@@ -685,4 +686,5 @@ export function generateSkillBuilderIntermediate(
     weeks,
     status: "active",
   };
+  return applyTierCutsToMesocycle(mesocycle, schedule.sessionTier ?? "recommended", "skill_builder");
 }

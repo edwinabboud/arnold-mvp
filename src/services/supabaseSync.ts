@@ -203,7 +203,10 @@ export async function hydrateFromSupabase(): Promise<{
         bodyweightKg: p.bodyweight_kg,
         benchmarks: p.benchmarks,
         experienceLevel: p.experience_level,
-        schedule: p.schedule || { daysPerWeek: 3, split: "full_body", preferredDays: [], sessionDurationMin: 60 },
+        // v2.4.7 — defend against legacy rows without sessionTier; default to "recommended".
+        schedule: p.schedule
+          ? { ...p.schedule, sessionTier: p.schedule.sessionTier ?? "recommended" }
+          : { daysPerWeek: 3, split: "full_body", preferredDays: [], sessionDurationMin: 60, sessionTier: "recommended" },
         targets: p.targets || [],
         assessmentComplete: p.assessment_complete ?? false,
         onboardingComplete: p.onboarding_complete ?? false,

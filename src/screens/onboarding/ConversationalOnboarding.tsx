@@ -357,6 +357,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
         split: autoSplit as any,
         preferredDays: selectedDays,
         sessionDurationMin: autoDuration,
+        sessionTier: "recommended",
       },
       targets: selectedTargets.map((t, idx) => ({
         id: `target_${idx}`,
@@ -381,6 +382,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
       split: autoSplit as any,
       preferredDays: selectedDays,
       sessionDurationMin: autoDuration,
+      sessionTier: "recommended",
     });
 
     // Save targets
@@ -406,6 +408,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
       split: autoSplit as any,
       preferredDays: selectedDays,
       sessionDurationMin: autoDuration,
+      sessionTier: "recommended" as const,
     };
 
     // Route to the correct generator based on path + tier
@@ -459,6 +462,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
         split: 'full_body',
         preferredDays: [1, 3, 5],
         sessionDurationMin: 60,
+        sessionTier: "recommended",
       },
       targets: [],
       assessmentComplete: true,
@@ -471,7 +475,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
 
     const mesocycle = generateStreetLifterBeginner(
       `user_${Date.now()}`,
-      { daysPerWeek: 3, split: 'full_body' as any, preferredDays: [1, 3, 5], sessionDurationMin: 60 },
+      { daysPerWeek: 3, split: 'full_body' as any, preferredDays: [1, 3, 5], sessionDurationMin: 60, sessionTier: "recommended" as const },
       beginnerProgs,
     );
     setActiveMesocycle(mesocycle);

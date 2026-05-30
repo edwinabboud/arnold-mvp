@@ -18,11 +18,22 @@ export type SplitType =
   | "full_body"
   | "custom";
 
+/**
+ * Session-length preference (v2.4.7). Drives runtime cut rules per path:
+ * Compact (~40 min) / Standard (~60 min) / Recommended (~90 min, default).
+ * Same program for all tiers — only accessories/finisher get cut.
+ * Main-lift ramp warm-up sets are NEVER cut (injury prevention).
+ */
+export type SessionTier = "compact" | "standard" | "recommended";
+
 export interface Schedule {
   daysPerWeek: number; // 2–6
   split: SplitType;
   preferredDays: number[]; // 0=Sun … 6=Sat
   sessionDurationMin: number; // target minutes per session
+  /** v2.4.7. Default "recommended" for new users; legacy profiles migrate to
+   *  "recommended" on rehydration (see store onRehydrateStorage). */
+  sessionTier: SessionTier;
 }
 
 export interface UserGoalTarget {

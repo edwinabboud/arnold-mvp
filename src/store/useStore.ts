@@ -13,6 +13,7 @@ import {
   ProgramPath,
   Schedule,
   SessionLog,
+  SessionTier,
   StreakData,
   TrainerTier,
   UserGoalTarget,
@@ -23,7 +24,10 @@ import {
 } from "../types";
 import { processSessionForAdaptation } from "../engine/silentAdaptation";
 import { applyAdaptationDecisions } from "../engine/applyAdaptation";
-import { rebalanceMesocycleToSchedule } from "../engine/planGenerator";
+import {
+  rebalanceMesocycleToSchedule,
+  applyTierCutsToMesocycle,
+} from "../engine/planGenerator";
 import { syncProfile, syncMesocycle, syncProgressions, syncStreaks, syncSessionLog } from '../services/supabaseSync';
 import {
   AdaptationQueue,
@@ -69,6 +73,10 @@ interface ArnoldStore {
   /** Granular schedule-only update — preserves the rest of profile, rebalances
    *  uncompleted mesocycle sessions to the new preferredDays/daysPerWeek. */
   setProfileSchedule: (schedule: Schedule) => void;
+  /** v2.4.7 (MVP 1.18) — change session-length tier. Writes profile.schedule
+   *  and re-applies path-specific cuts to uncompleted sessions in the active
+   *  mesocycle. Subject to the one-way ratchet documented on `applyCutsForTier`. */
+  setSessionTier: (tier: SessionTier) => void;
 
   // Onboarding
   onboarding: OnboardingState;
@@ -199,6 +207,30 @@ export const useStore = create<ArnoldStore>()(
         }
         const finalProfile = get().profile;
         if (finalProfile) bgSync(() => syncProfile(finalProfile));
+      },
+
+      // v2.4.7 (MVP 1.18) — session-length tier. See applyCutsForTier JSDoc
+      // for the cut tables AND the ratchet limitation (upgrading mid-mesocycle
+      // does not restore previously-dropped exercises).
+      setSessionTier: (tier) => {
+        const state = get();
+        if (!state.profile) return;
+        const newSchedule: Schedule = { ...state.profile.schedule, sessionTier: tier };
+        set({ profile: { ...state.profile, schedule: newSchedule } });
+
+        if (state.activeMesocycle) {
+          const completedIds = new Set(state.sessionHistory.map((h) => h.plannedSessionId));
+          const newMeso = applyTierCutsToMesocycle(
+            state.activeMesocycle,
+            tier,
+            state.profile.programPath,
+            completedIds,
+          );
+          set({ activeMesocycle: newMeso });
+          bgSync(() => syncMesocycle(newMeso));
+        }
+        const updated = get().profile;
+        if (updated) bgSync(() => syncProfile(updated));
       },
 
       // ── Onboarding ──────────────────────────────────────────────────────
@@ -730,6 +762,11 @@ export const useStore = create<ArnoldStore>()(
         if (error) {
           console.log("[ARNOLD ACTIVESESSION] rehydration ERROR:", error);
         } else {
+          // v2.4.7 (MVP 1.18) — migrate legacy schedules to have sessionTier.
+          if (state?.profile?.schedule && !state.profile.schedule.sessionTier) {
+            state.profile.schedule.sessionTier = "recommended";
+            console.log("[ARNOLD MIGRATE] sessionTier defaulted to 'recommended' on rehydrate");
+          }
           console.log(
             "[ARNOLD ACTIVESESSION] rehydrated from disk. activeSession exists:",
             !!state?.activeSession,
