@@ -1010,17 +1010,23 @@ export default function SessionScreen({ navigation, route }: any) {
   // elapsed while we were away).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
-      console.log("[ARNOLD TIMER] AppState change:", next, "restEndsAt:", restEndsAtRef.current, "warmupEndsAt:", warmupEndsAtRef.current);
+      if (__DEV__) {
+        console.log("[ARNOLD TIMER] AppState change:", next, "restEndsAt:", restEndsAtRef.current, "warmupEndsAt:", warmupEndsAtRef.current);
+      }
       if (next !== "active") return;
       if (restEndsAtRef.current != null) {
         const rem = Math.max(0, Math.ceil((restEndsAtRef.current - Date.now()) / 1000));
-        console.log("[ARNOLD TIMER] AppState active: recomputed rest remaining:", rem);
+        if (__DEV__) {
+          console.log("[ARNOLD TIMER] AppState active: recomputed rest remaining:", rem);
+        }
         setRestTime(rem);
         if (rem <= 0) restCompleteRef.current();
       }
       if (warmupEndsAtRef.current != null) {
         const rem = Math.max(0, Math.ceil((warmupEndsAtRef.current - Date.now()) / 1000));
-        console.log("[ARNOLD TIMER] AppState active: recomputed warmup remaining:", rem);
+        if (__DEV__) {
+          console.log("[ARNOLD TIMER] AppState active: recomputed warmup remaining:", rem);
+        }
         setWarmupTime(rem);
         if (rem <= 0) warmupCompleteRef.current();
       }
@@ -1036,16 +1042,22 @@ export default function SessionScreen({ navigation, route }: any) {
   // per-second cadence; this just nudges remaining the instant we're visible.)
   useFocusEffect(
     React.useCallback(() => {
-      console.log("[ARNOLD TIMER] useFocusEffect fired. resting:", resting, "warmupTiming:", warmupTiming);
+      if (__DEV__) {
+        console.log("[ARNOLD TIMER] useFocusEffect fired. resting:", resting, "warmupTiming:", warmupTiming);
+      }
       if (restEndsAtRef.current != null) {
         const rem = Math.max(0, Math.ceil((restEndsAtRef.current - Date.now()) / 1000));
-        console.log("[ARNOLD TIMER] Focus recompute rest remaining:", rem);
+        if (__DEV__) {
+          console.log("[ARNOLD TIMER] Focus recompute rest remaining:", rem);
+        }
         setRestTime(rem);
         if (rem <= 0) restCompleteRef.current();
       }
       if (warmupEndsAtRef.current != null) {
         const rem = Math.max(0, Math.ceil((warmupEndsAtRef.current - Date.now()) / 1000));
-        console.log("[ARNOLD TIMER] Focus recompute warmup remaining:", rem);
+        if (__DEV__) {
+          console.log("[ARNOLD TIMER] Focus recompute warmup remaining:", rem);
+        }
         setWarmupTime(rem);
         if (rem <= 0) warmupCompleteRef.current();
       }

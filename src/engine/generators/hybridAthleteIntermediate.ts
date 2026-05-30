@@ -258,11 +258,11 @@ function buildHeavyDips(
 
   if (phase === "test") {
     exercises.push(
-      makeEx(`${prefix}_t0`, "weighted_dip", "Weighted Dips (50%)", "ramp_up", 1, 3, 120, "easy", { notes: "~50% estimated 1RM" }),
-      makeEx(`${prefix}_t1`, "weighted_dip", "Weighted Dips (70%)", "ramp_up", 1, 2, 120, "easy", { notes: "~70% estimated 1RM" }),
-      makeEx(`${prefix}_t2`, "weighted_dip", "Weighted Dips (82%)", "ramp_up", 1, 1, 150, "moderate", { notes: "~82%" }),
-      makeEx(`${prefix}_t3`, "weighted_dip", "Weighted Dips (90%)", "ramp_up", 1, 1, 180, "moderate", { notes: "~90%" }),
-      makeEx(`${prefix}_t4`, "weighted_dip", "Weighted Dips (95%)", "ramp_up", 1, 1, 240, "challenging", { notes: "~95%" }),
+      makeEx(`${prefix}_t0`, "weighted_dip", "Weighted Dips", "ramp_up", 1, 3, 120, "easy", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t1`, "weighted_dip", "Weighted Dips", "ramp_up", 1, 2, 120, "easy", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t2`, "weighted_dip", "Weighted Dips", "ramp_up", 1, 1, 150, "moderate", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t3`, "weighted_dip", "Weighted Dips", "ramp_up", 1, 1, 180, "moderate", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t4`, "weighted_dip", "Weighted Dips", "ramp_up", 1, 1, 240, "challenging", { notes: "warm-up set" }),
       makeEx(`${prefix}_t5`, "weighted_dip", "Weighted Dips — 1RM ATTEMPT", "main", 1, 1, 300, "challenging", { notes: "MAX EFFORT.", rpeTarget: 10 }),
     );
   } else if (phase === "specialization") {
@@ -305,11 +305,11 @@ function buildHeavyPullups(
 
   if (phase === "test") {
     exercises.push(
-      makeEx(`${prefix}_t0`, "weighted_pullup", "Weighted Pull-ups (50%)", "ramp_up", 1, 3, 120, "easy", { notes: "~50%" }),
-      makeEx(`${prefix}_t1`, "weighted_pullup", "Weighted Pull-ups (70%)", "ramp_up", 1, 2, 120, "easy", { notes: "~70%" }),
-      makeEx(`${prefix}_t2`, "weighted_pullup", "Weighted Pull-ups (82%)", "ramp_up", 1, 1, 150, "moderate", { notes: "~82%" }),
-      makeEx(`${prefix}_t3`, "weighted_pullup", "Weighted Pull-ups (90%)", "ramp_up", 1, 1, 180, "moderate", { notes: "~90%" }),
-      makeEx(`${prefix}_t4`, "weighted_pullup", "Weighted Pull-ups (95%)", "ramp_up", 1, 1, 240, "challenging", { notes: "~95%" }),
+      makeEx(`${prefix}_t0`, "weighted_pullup", "Weighted Pull-ups", "ramp_up", 1, 3, 120, "easy", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t1`, "weighted_pullup", "Weighted Pull-ups", "ramp_up", 1, 2, 120, "easy", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t2`, "weighted_pullup", "Weighted Pull-ups", "ramp_up", 1, 1, 150, "moderate", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t3`, "weighted_pullup", "Weighted Pull-ups", "ramp_up", 1, 1, 180, "moderate", { notes: "warm-up set" }),
+      makeEx(`${prefix}_t4`, "weighted_pullup", "Weighted Pull-ups", "ramp_up", 1, 1, 240, "challenging", { notes: "warm-up set" }),
       makeEx(`${prefix}_t5`, "weighted_pullup", "Weighted Pull-ups — 1RM ATTEMPT", "main", 1, 1, 300, "challenging", { notes: "MAX EFFORT.", rpeTarget: 10 }),
     );
   } else if (phase === "specialization") {
