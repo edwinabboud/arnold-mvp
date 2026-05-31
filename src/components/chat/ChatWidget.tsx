@@ -218,6 +218,20 @@ export default function ChatWidget({
     setInput("");
   }, [input, loading, onSendText]);
 
+  // v2.4.8 §5.1 — if the last Arnold message still awaiting a response is a
+  // pure-tappable turn (e.g. the §1.6 RPE calibration set), the composer is
+  // hidden until the user taps a chip. "Never make the user type a number
+  // on a scale." Defaults to showing the composer when no signal is present.
+  const composerHidden = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== "arnold") continue;
+      if (!m.options || m.optionSelected) continue;
+      return m.inputMode === "tappable_only";
+    }
+    return false;
+  })();
+
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [600, 0],
@@ -266,29 +280,31 @@ export default function ChatWidget({
           </View>
         )}
 
-        {/* Input */}
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.textInput}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Ask Arnold anything..."
-            placeholderTextColor={colors.textMuted}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-            editable={!loading}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              input.trim() ? styles.sendActive : styles.sendInactive,
-            ]}
-            onPress={handleSend}
-            disabled={!input.trim() || loading}
-          >
-            <Text style={styles.sendIcon}>→</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1 */}
+        {!composerHidden && (
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.textInput}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Ask Arnold anything..."
+              placeholderTextColor={colors.textMuted}
+              onSubmitEditing={handleSend}
+              returnKeyType="send"
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                input.trim() ? styles.sendActive : styles.sendInactive,
+              ]}
+              onPress={handleSend}
+              disabled={!input.trim() || loading}
+            >
+              <Text style={styles.sendIcon}>→</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </Animated.View>
   );
