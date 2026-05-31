@@ -26,6 +26,116 @@ export type SplitType =
  */
 export type SessionTier = "compact" | "standard" | "recommended";
 
+// ── v2.4.8 Conversation Context Packet ───────────────────────────────────────
+// Dense mandatory packet attached to every Conversation Agent call (§2.1).
+// Superseded the legacy `ContextPacket` (still in use by Session Adapter +
+// Progress Analyst). Built by `src/engine/conversationContext.ts`.
+
+/** One exercise's per-session summary inside SessionSummary. */
+export interface SessionSummaryExercise {
+  name: string;
+  role: ExerciseRole;
+  /** Planned difficulty intent; null only when the source is missing. */
+  difficultyIntent: DifficultyIntent | null;
+  unit: "reps" | "seconds";
+  /** Human-readable target, e.g. "3x6 @ +25kg" or "4x12s tuck planche". */
+  target: string;
+  /** What actually happened, e.g. "3x6" or "skipped". */
+  achieved: string;
+  /** Completed sets / planned sets, clamped 0..1. */
+  completionRate: number;
+  /** Numeric RPE if the user explicitly reported one; null in MVP. */
+  rpeReported: number | null;
+  /** Crude RPE inference from behavior; null when no signal exists. */
+  rpeInferred: number | null;
+  skipped: boolean;
+}
+
+export interface SessionSummary {
+  /** ISO date of session completion. */
+  date: string;
+  /** Resolved session type per v2.4.8 §1.3 (e.g. "heavy_compound", "pure_skill"). */
+  sessionType: string;
+  exercises: SessionSummaryExercise[];
+  /** Reps on the session's finisher exercise, if present; null otherwise. */
+  finisherReps: number | null;
+  /** Body areas with reported pain in this session, e.g. ["left shoulder"]. */
+  painFlags: string[];
+}
+
+export interface CompressedSummary {
+  date: string;
+  sessionType: string;
+  /** One-line outcome — "clean" / "missed pull-up reps" / "deload" / etc. */
+  headlineOutcome: string;
+  /** Body area flagged; null if no pain reported. */
+  painFlag: string | null;
+}
+
+/** v2.4.8 §2.3 — the full packet for the Conversation Agent. */
+export interface ConversationContextPacket {
+  user: {
+    path: ProgramPath;
+    tier: TrainerTier;
+    /** From onboarding if collected; null otherwise. */
+    trainingAgeMonths: number | null;
+    sessionTier: SessionTier;
+    /** PlanPhase as a free string (e.g. "accumulation", "strength", "deload"). */
+    phase: string;
+    weekInMeso: number;
+    isDeload: boolean;
+    isTestWeek: boolean;
+    bodyweightKg: number | null;
+    /** Flattened e1RMs keyed by lift slug — value null when not yet measured. */
+    e1rm: Record<string, number | null>;
+  };
+  goals: {
+    /** From `arnold-path-specific-goals` knowledge — empty in MVP (no source yet). */
+    pathGoals: string[];
+    /** Nearest upcoming PR/test attempt; null when none scheduled. */
+    activePR: {
+      lift_or_skill: string;
+      targetValue: string;
+      scheduledWeek: number;
+    } | null;
+  };
+  /** Populated only for post-session context; null for mid-session / ad-hoc. */
+  completedSession: {
+    sessionType: string;
+    /** Resolved per v2.4.8 §1.3 — NOT assumed to be the heavy compound. */
+    primaryPurposeMovement: string;
+    exercises: SessionSummaryExercise[];
+    finisherReps: number | null;
+    /** v2.4.8 §2.5 — skip-derived only in MVP (skipped, low-completion). */
+    behavioralFlags: string[];
+  } | null;
+  /** Last 5 sessions in full detail (newest first). */
+  recentHistoryFull: SessionSummary[];
+  /** Sessions 6–10 compressed (newest first). */
+  recentHistoryCompressed: CompressedSummary[];
+  /** Chronological finisher reps (oldest → newest) for fatigue trend. */
+  finisherTrend: number[];
+  recovery: {
+    openPainFlags: Array<{ area: string; severity: number; firstSeen: string }>;
+    daysSinceLastSession: number;
+    /** Reserved for §9.4 return-to-train logic; false in MVP. */
+    inReturnToTrain: boolean;
+    sessionsThisWeek: number;
+    scheduledThisWeek: number;
+  };
+  pendingAdaptations: Array<{
+    summary: string;
+    reason: string;
+    progressionId: string;
+    type: "weight" | "progression" | "volume" | "deload";
+  }>;
+  knowledge: {
+    phaseGuidance: string;
+    currentVariationRationale: string | null;
+    relevantProtocol: string | null;
+  };
+}
+
 export interface Schedule {
   daysPerWeek: number; // 2–6
   split: SplitType;
