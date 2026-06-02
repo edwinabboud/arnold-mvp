@@ -4,7 +4,7 @@
 // Manages message state, input classification, pain flow, context building.
 // =============================================================================
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import {
   tryQuickResponse,
@@ -167,6 +167,24 @@ export function useChatService(): UseChatServiceReturn {
 
   const addArnoldReply = useCallback((text: string, source: 'quick' | 'rules' | 'llm', options?: ChatOption[]) => {
     addMessage(makeArnoldMsg(text, source, options));
+  }, [addMessage]);
+
+  // v2.4.9 Part 1 — one-time migration message for existing Compact/Standard
+  // users. Recommended users see nothing (their sessions are unchanged).
+  // Fires the first time this hook mounts post-update, then `markV249MigrationShown`
+  // persists the flag so it doesn't repeat across screens or app restarts.
+  useEffect(() => {
+    const state = useStore.getState();
+    if (state.v249MigrationShown) return;
+    const tier = state.profile?.schedule?.sessionTier;
+    if (tier !== "compact" && tier !== "standard") return;
+    addMessage(
+      makeArnoldMsg(
+        "I'm rebuilding how I shorten sessions — for now you're getting full sessions. The shorter options come back soon with better programming.",
+        'rules',
+      ),
+    );
+    state.markV249MigrationShown();
   }, [addMessage]);
 
   const addSystemMessage = useCallback((text: string) => {

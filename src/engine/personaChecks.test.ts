@@ -69,6 +69,7 @@ function packetWithSomeData(): ConversationContextPacket {
       isTestWeek: false,
       bodyweightKg: 80,
       e1rm: { dip: 100, pull_up: 90, squat: 130 },
+      compressionProfile: null,
     },
     goals: { pathGoals: [], activePR: null },
     completedSession: {
@@ -119,6 +120,7 @@ function emptyPacket(): ConversationContextPacket {
       isTestWeek: false,
       bodyweightKg: null,
       e1rm: {},
+      compressionProfile: null,
     },
     goals: { pathGoals: [], activePR: null },
     completedSession: null,

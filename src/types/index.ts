@@ -88,6 +88,17 @@ export interface ConversationContextPacket {
     bodyweightKg: number | null;
     /** Flattened e1RMs keyed by lift slug — value null when not yet measured. */
     e1rm: Record<string, number | null>;
+    /**
+     * v2.4.9 §5 — explains the lever combination behind a compressed session
+     * so Arnold can speak to "why is this short?" in coaching language.
+     * Always null for `sessionTier === "recommended"` and null everywhere
+     * in v2.4.9 Part 1 (no compression in flight). Part 2 populates this
+     * from the per-path × session-type compression profile.
+     */
+    compressionProfile: {
+      leversApplied: string[];
+      rationale: string;
+    } | null;
   };
   goals: {
     /** From `arnold-path-specific-goals` knowledge — empty in MVP (no source yet). */

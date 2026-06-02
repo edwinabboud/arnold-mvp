@@ -104,6 +104,7 @@ function packet(
       isTestWeek: false,
       bodyweightKg: 80,
       e1rm: { dip: 100, pull_up: 90, squat: 130 },
+      compressionProfile: null,
     },
     goals: { pathGoals: [], activePR: null },
     completedSession: null,
@@ -234,6 +235,7 @@ describe("selectFirstReviewQuestion — §1.2 priorities", () => {
         isTestWeek: true,
         bodyweightKg: 80,
         e1rm: { dip: 100, pull_up: 90, squat: 130 },
+        compressionProfile: null,
       },
       goals: {
         pathGoals: [],
@@ -265,6 +267,7 @@ describe("selectFirstReviewQuestion — §1.2 priorities", () => {
         isTestWeek: false,
         bodyweightKg: 70,
         e1rm: { dip: null, pull_up: null, squat: null },
+        compressionProfile: null,
       },
       completedSession: postSession({
         sessionType: "skill_push_pull",
