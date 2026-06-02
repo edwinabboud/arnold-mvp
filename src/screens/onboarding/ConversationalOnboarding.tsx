@@ -218,8 +218,9 @@ export default function ConversationalOnboarding({ navigation }: any) {
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [selectedSplit, setSelectedSplit] = useState("");
   const [sessionDuration, setSessionDuration] = useState(0);
-  // v2.4.9 Part 1 — session-length picked in step 5. Skip-default is "standard"
-  // per amendment §0/§6 (replaces v2.4.7's "recommended" skip-default).
+  // v2.4.9 Part 1 — session-length picked in step 5. The user must select one
+  // of the three options to advance; `standard` is just the initial-render
+  // value before a tap (no Skip path exists anymore).
   const [sessionTier, setSessionTier] =
     useState<"compact" | "standard" | "recommended">("standard");
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
@@ -279,8 +280,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
     goToStep(5); // v2.4.9 Part 1 — step 5 now hosts the session-length picker
   };
 
-  // Step 5 - Session length pick (v2.4.9 Part 1). Skip keeps the "standard"
-  // default. Tier is stored only — Part 2 will materialise the cuts.
+  // Step 5 - Session length pick (v2.4.9 Part 1). Tier is stored only —
+  // Part 2 will materialise the cuts.
   const handleSessionTierSelect = (tier: "compact" | "standard" | "recommended") => {
     setSessionTier(tier);
     goToStep(8);
@@ -720,7 +721,9 @@ export default function ConversationalOnboarding({ navigation }: any) {
         );
 
       // Step 5 - Session length (v2.4.9 Part 1). Replaces the dead day-picker —
-      // training days are auto-spread in step 4. Skip defaults to "standard".
+      // training days are auto-spread in step 4. User must pick one of the
+      // three explicit options to advance (no Skip path — ~60 already covers
+      // the "I'm not sure" middle).
       case 5:
         return (
           <View style={styles.stepContainer}>
@@ -730,34 +733,27 @@ export default function ConversationalOnboarding({ navigation }: any) {
             <Text style={styles.stepTitle}>Session length</Text>
             <Text style={styles.stepSubtitle}>How much time do you have for a typical session?</Text>
 
-            <View style={styles.splitOptionsContainer}>
+            <View style={styles.sessionTierContainer}>
               <TouchableOpacity
-                style={styles.splitOptionButton}
+                style={styles.sessionTierButton}
                 onPress={() => handleSessionTierSelect("compact")}
               >
-                <Text style={styles.splitOptionLabel}>~40 minutes</Text>
-                <Text style={styles.splitOptionSub}>Compact</Text>
+                <Text style={styles.sessionTierLabel}>~40 minutes</Text>
+                <Text style={styles.sessionTierSub}>Compact</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.splitOptionButton}
+                style={styles.sessionTierButton}
                 onPress={() => handleSessionTierSelect("standard")}
               >
-                <Text style={styles.splitOptionLabel}>~60 minutes</Text>
-                <Text style={styles.splitOptionSub}>Standard</Text>
+                <Text style={styles.sessionTierLabel}>~60 minutes</Text>
+                <Text style={styles.sessionTierSub}>Standard</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.splitOptionButton}
+                style={styles.sessionTierButton}
                 onPress={() => handleSessionTierSelect("recommended")}
               >
-                <Text style={styles.splitOptionLabel}>~90 minutes</Text>
-                <Text style={styles.splitOptionSub}>Recommended</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.splitOptionButton}
-                onPress={() => handleSessionTierSelect("standard")}
-              >
-                <Text style={styles.splitOptionLabel}>Skip</Text>
-                <Text style={styles.splitOptionSub}>Use the default (~60 min)</Text>
+                <Text style={styles.sessionTierLabel}>~90 minutes</Text>
+                <Text style={styles.sessionTierSub}>Recommended</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1401,6 +1397,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "rgba(255,255,255,0.25)",
     marginTop: 2,
+  },
+
+  // Step 5 - Session length (v2.4.9 Part 1). Bigger tap targets than the
+  // split picker; accent-orange time labels signal these are the primary
+  // choice driver, descriptors stay muted.
+  sessionTierContainer: {
+    flex: 1,
+    marginTop: 18,
+  },
+  sessionTierButton: {
+    width: "100%",
+    paddingVertical: 20,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(255,255,255,0.015)",
+    minHeight: 72,
+    justifyContent: "center",
+  },
+  sessionTierLabel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.accent,
+  },
+  sessionTierSub: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.25)",
+    marginTop: 4,
   },
 
   // Step 7 - Session Duration
