@@ -218,6 +218,10 @@ export default function ConversationalOnboarding({ navigation }: any) {
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [selectedSplit, setSelectedSplit] = useState("");
   const [sessionDuration, setSessionDuration] = useState(0);
+  // v2.4.9 Part 1 — session-length picked in step 5. Skip-default is "standard"
+  // per amendment §0/§6 (replaces v2.4.7's "recommended" skip-default).
+  const [sessionTier, setSessionTier] =
+    useState<"compact" | "standard" | "recommended">("standard");
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [collectedBenchmarks, setCollectedBenchmarks] = useState<UserBenchmarks | null>(null);
   const [collectedExperienceLevel, setCollectedExperienceLevel] = useState<"new" | "experienced" | null>(null);
@@ -246,7 +250,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
       if (step === 4) {
         goToStep(2); // From schedule, go back to path selection
       } else if (step === 8) {
-        goToStep(4); // Skip back over removed steps 5-7
+        goToStep(5); // Step 5 hosts the v2.4.9 session-length picker
       } else {
         goToStep(step - 1);
       }
@@ -272,7 +276,14 @@ export default function ConversationalOnboarding({ navigation }: any) {
       5: [1, 2, 3, 4, 5], // Mon-Fri
     };
     setSelectedDays(autoSpread[days] || [1, 3, 5]);
-    goToStep(8); // Skip day picker, go straight to targets
+    goToStep(5); // v2.4.9 Part 1 — step 5 now hosts the session-length picker
+  };
+
+  // Step 5 - Session length pick (v2.4.9 Part 1). Skip keeps the "standard"
+  // default. Tier is stored only — Part 2 will materialise the cuts.
+  const handleSessionTierSelect = (tier: "compact" | "standard" | "recommended") => {
+    setSessionTier(tier);
+    goToStep(8);
   };
 
   // Step 5 - Day selection handlers
@@ -357,7 +368,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
         split: autoSplit as any,
         preferredDays: selectedDays,
         sessionDurationMin: autoDuration,
-        sessionTier: "recommended",
+        sessionTier,
       },
       targets: selectedTargets.map((t, idx) => ({
         id: `target_${idx}`,
@@ -382,7 +393,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
       split: autoSplit as any,
       preferredDays: selectedDays,
       sessionDurationMin: autoDuration,
-      sessionTier: "recommended",
+      sessionTier,
     });
 
     // Save targets
@@ -408,7 +419,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
       split: autoSplit as any,
       preferredDays: selectedDays,
       sessionDurationMin: autoDuration,
-      sessionTier: "recommended" as const,
+      sessionTier,
     };
 
     // Route to the correct generator based on path + tier
@@ -708,51 +719,47 @@ export default function ConversationalOnboarding({ navigation }: any) {
           </View>
         );
 
-      // Step 5 - Which Days
+      // Step 5 - Session length (v2.4.9 Part 1). Replaces the dead day-picker —
+      // training days are auto-spread in step 4. Skip defaults to "standard".
       case 5:
         return (
           <View style={styles.stepContainer}>
             <BackButton onPress={goBack} />
             <StepDots current={5} total={10} />
-            
-            <Text style={styles.stepTitle}>Which days?</Text>
-            <Text style={styles.stepSubtitle}>Select {trainingDays} training days</Text>
 
-            <View style={styles.daySelectionContainer}>
-              {DAY_LABELS.map((dayLabel, dayIndex) => {
-                const isSelected = selectedDays.includes(dayIndex);
-                const isFull = !isSelected && selectedDays.length >= trainingDays;
-                
-                return (
-                  <TouchableOpacity
-                    key={dayIndex}
-                    style={[
-                      styles.dayButton,
-                      isSelected && styles.dayButtonSelected,
-                      isFull && styles.dayButtonDisabled,
-                    ]}
-                    onPress={() => !isFull && handleDayToggle(dayIndex)}
-                    disabled={isFull}
-                  >
-                    <Text
-                      style={[
-                        styles.dayButtonText,
-                        isSelected && styles.dayButtonTextSelected,
-                        isFull && styles.dayButtonTextDisabled,
-                      ]}
-                    >
-                      {dayLabel}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <Text style={styles.stepTitle}>Session length</Text>
+            <Text style={styles.stepSubtitle}>How much time do you have for a typical session?</Text>
+
+            <View style={styles.splitOptionsContainer}>
+              <TouchableOpacity
+                style={styles.splitOptionButton}
+                onPress={() => handleSessionTierSelect("compact")}
+              >
+                <Text style={styles.splitOptionLabel}>~40 minutes</Text>
+                <Text style={styles.splitOptionSub}>Compact</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.splitOptionButton}
+                onPress={() => handleSessionTierSelect("standard")}
+              >
+                <Text style={styles.splitOptionLabel}>~60 minutes</Text>
+                <Text style={styles.splitOptionSub}>Standard</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.splitOptionButton}
+                onPress={() => handleSessionTierSelect("recommended")}
+              >
+                <Text style={styles.splitOptionLabel}>~90 minutes</Text>
+                <Text style={styles.splitOptionSub}>Recommended</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.splitOptionButton}
+                onPress={() => handleSessionTierSelect("standard")}
+              >
+                <Text style={styles.splitOptionLabel}>Skip</Text>
+                <Text style={styles.splitOptionSub}>Use the default (~60 min)</Text>
+              </TouchableOpacity>
             </View>
-
-            <View style={styles.spacer} />
-            
-            {selectedDays.length === trainingDays && (
-              <PrimaryButton label="Continue" onPress={() => goToStep(8)} />
-            )}
           </View>
         );
 

@@ -109,6 +109,13 @@ interface ArnoldStore {
   streaks: StreakData;
   /** Tracks which Mon-Sun week the increment/reset check last ran. ISO date string of that week's Monday (e.g. "2026-05-04"). Prevents double-firing. */
   lastStreakCheckWeek: string | null;
+  /** v2.4.9 Part 1 — true once the one-time migration message has been
+   *  enqueued for an existing compact/standard user. Persisted so it fires
+   *  exactly once per install. New users (post-onboarding) don't get the
+   *  message — useChatService gates on tier === "compact" | "standard". */
+  v249MigrationShown: boolean;
+  /** v2.4.9 Part 1 — mark the migration message as shown. */
+  markV249MigrationShown: () => void;
   /** Arnold-approved drops per week from Plan Realignment Option 2. Key = ISO date of week's Monday. Populated by Plan Realignment dialog (not yet built). */
   weeklyDrops: Record<string, number>;
   incrementStreak: () => void;
@@ -539,6 +546,8 @@ export const useStore = create<ArnoldStore>()(
       streaks: initialStreaks,
       lastStreakCheckWeek: null,
       weeklyDrops: {},
+      v249MigrationShown: false,
+      markV249MigrationShown: () => set({ v249MigrationShown: true }),
       incrementStreak: () => {
         set((s) => {
           const newDaily = s.streaks.currentDaily + 1;
@@ -762,6 +771,7 @@ export const useStore = create<ArnoldStore>()(
         streaks: state.streaks,
         lastStreakCheckWeek: state.lastStreakCheckWeek,
         weeklyDrops: state.weeklyDrops,
+        v249MigrationShown: state.v249MigrationShown,
         sessionHistory: state.sessionHistory,
         adaptationQueue: state.adaptationQueue,
         lastAppliedAdjustments: state.lastAppliedAdjustments,

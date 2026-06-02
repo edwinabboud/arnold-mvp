@@ -657,6 +657,11 @@ export function buildConversationContextPacket(
       isTestWeek,
       bodyweightKg: profile.bodyweightKg ?? null,
       e1rm: flattenE1RM(e1rmProfile),
+      // v2.4.9 Part 1: compression is disabled (all tiers → full sessions).
+      // Part 2 populates this from the per-path × session-type compression
+      // profile so Arnold can name the lever combination ("we're holding
+      // the heavy work and trimming the volume work today").
+      compressionProfile: null,
     },
     goals: {
       // No `arnold-path-specific-goals` knowledge source ships in MVP — pathGoals
@@ -707,6 +712,11 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   out.push(`  bodyweightKg: ${N(u.bodyweightKg, "not measured")}`);
   const e1rmLines = Object.entries(u.e1rm).map(([k, v]) => `${k}=${v == null ? "null" : `${v}kg`}`);
   out.push(`  e1rm: ${e1rmLines.join(", ")}`);
+  if (u.compressionProfile) {
+    out.push(`  compression: levers=[${u.compressionProfile.leversApplied.join(", ")}] — ${u.compressionProfile.rationale}`);
+  } else {
+    out.push(`  compression: null (full session — v2.4.9 Part 1 has compression disabled)`);
+  }
 
   // Goals
   out.push(``);

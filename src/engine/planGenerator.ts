@@ -910,31 +910,25 @@ export function applyCutsForTier(
 }
 
 /**
- * Walk every session in a mesocycle, applying `applyCutsForTier` to each.
+ * **v2.4.9 Part 1 — TEMPORARY NO-OP.** Returns the mesocycle unchanged
+ * regardless of tier. v2.4.7's cut logic is superseded; v2.4.9 will ship
+ * real per-path × session-type compression profiles in Part 2 (after
+ * program-bible review). Until then, all tiers produce full sessions.
  *
- * - At fresh generation (no completed sessions): pass `completedIds` as
- *   `undefined` so cuts apply to every session.
- * - On mid-mesocycle tier switch: pass `completedIds` to preserve already-
- *   logged sessions immutably (history isn't rewritten); only uncompleted
- *   sessions get re-cut.
+ * The function signature is preserved so the 6 generator call sites don't
+ * need editing. `applyCutsForTier` above is intentionally retained but
+ * unused — the no-op short-circuits before reaching it. Part 2 replaces
+ * the body with a real compression-profile dispatch; the call sites stay
+ * exactly as they are.
  *
- * **Inherits the ratchet limitation** of `applyCutsForTier` — calling this
- * on a previously-cut mesocycle to UPGRADE tier (e.g. compact → recommended)
- * does not restore dropped exercises. See `applyCutsForTier` JSDoc.
+ * @deprecated cut logic. New design (v2.4.9 §3) ships in Part 2.
  */
 export function applyTierCutsToMesocycle(
   meso: Mesocycle,
-  tier: SessionTier,
-  path: ProgramPath,
-  completedIds?: Set<string>,
+  _tier: SessionTier,
+  _path: ProgramPath,
+  _completedIds?: Set<string>,
 ): Mesocycle {
-  return {
-    ...meso,
-    weeks: meso.weeks.map((week) => ({
-      ...week,
-      sessions: week.sessions.map((s) =>
-        completedIds?.has(s.id) ? s : applyCutsForTier(s, tier, path),
-      ),
-    })),
-  };
+  // v2.4.9 Part 1: compression temporarily disabled. All tiers → full sessions.
+  return meso;
 }
