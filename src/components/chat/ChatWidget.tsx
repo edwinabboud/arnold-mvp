@@ -12,7 +12,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Animated,
   StyleSheet,
@@ -191,9 +191,18 @@ export default function ChatWidget({
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
   // Bottom inset for home-indicator clearance on iPhone X+ — applied only to
-  // the input row, never to keyboardVerticalOffset (offset 0 is required for
-  // the bottom-anchored sheet, per the post-crash fix).
+  // the input row, never as a vertical offset for any keyboard math.
   const insets = useSafeAreaInsets();
+  // Keyboard height as a *plain* useState number — NOT an Animated.Value.
+  // Applied as `marginBottom` on the container so the whole sheet
+  // (including the bottom-pinned input row) lifts above the keyboard. A
+  // plain number is a re-render, not an animation, so it CANNOT conflict
+  // with the native-driven `translateY` on the same node (that mix was
+  // the 961673b crash). KeyboardAvoidingView with behavior="padding"
+  // didn't work here because the sheet is a fixed-height absolute
+  // container — padding inside it gets absorbed/clipped rather than
+  // lifting the input row.
+  const [kbHeight, setKbHeight] = useState(0);
 
   // Animate open/close
   useEffect(() => {
@@ -213,6 +222,25 @@ export default function ChatWidget({
       }, 100);
     }
   }, [messages.length]);
+
+  // Track keyboard height in plain state. iOS gets `keyboardWillShow/Hide`
+  // (fires slightly before the keyboard animates in, matches the system
+  // curve more naturally); Android only ships `keyboardDidShow/Hide`.
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      setKbHeight(e.endCoordinates.height);
+      // Latest message would otherwise sit just behind the input row
+      // after the sheet lifts.
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
@@ -244,7 +272,18 @@ export default function ChatWidget({
 
   return (
     <Animated.View
-      style={[styles.container, { transform: [{ translateY }] }]}
+      style={[
+        styles.container,
+        { transform: [{ translateY }] },
+        // Plain number from useState — re-render, NOT an animation. Lifts
+        // the whole sheet (incl. bottom-pinned input row) above the
+        // keyboard. Because this is a JS layout value (not an
+        // Animated.Value), it CANNOT conflict with the native-driven
+        // `translateY` above. KeyboardAvoidingView was removed: its
+        // `behavior="padding"` was unreliable inside this fixed-height
+        // absolute sheet.
+        { marginBottom: kbHeight },
+      ]}
     >
       {/*
        * Near-full-height (92%) absolute bottom-sheet anchored at `bottom: 0`,
@@ -252,32 +291,16 @@ export default function ChatWidget({
        * column: header (fixed) → FlatList (flex:1, scrolls, newest at bottom)
        * → input row (fixed, pinned to bottom).
        *
-       * KeyboardAvoidingView with `behavior="padding"` adds bottom padding
-       * equal to the keyboard height *inside* the sheet when typing. Because
-       * the FlatList is `flex: 1` and the input row is fixed-height, the
-       * padding compresses the list and lifts the input row up by the
-       * keyboard height — the input ends up flush above the keyboard,
-       * conversation stays visible above it. `keyboardVerticalOffset={0}`
-       * because the sheet is anchored at `bottom: 0` — no gap to account
-       * for. (An earlier attempt passed `insets.top` here, which over-padded
-       * and pushed the input off-screen on notched devices.)
-       *
        * CRITICAL CRASH GUARD: the parent Animated.View carries ONLY a
-       * native-driven `translateY` transform. Mixing a JS-driven layout
-       * animation (e.g. animating `bottom`) with a native-driven transform
-       * on the same node crashes the app — that was the 961673b regression.
-       * Keyboard avoidance lives in KeyboardAvoidingView, which is a layout
-       * component — no animated-driver involvement on the container.
-       *
-       * Android: behavior is undefined — Android handles soft-keyboard via
-       * the activity's `windowSoftInputMode`, which Expo sets to
-       * `adjustResize` by default.
+       * native-driven `translateY` transform. The `marginBottom: kbHeight`
+       * above is a plain useState number — applying it triggers a normal
+       * re-render, not an Animated update — so there is no second animated
+       * driver on the node. Mixing a JS-driven Animated.Value with a
+       * native-driven transform on the same node crashes the app (961673b).
+       * NEVER convert `kbHeight` to `Animated.Value` without also moving
+       * `translateY` off the native driver. Re-render ≠ animation.
        */}
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <View style={styles.keyboardView}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerHandle} />
@@ -314,16 +337,21 @@ export default function ChatWidget({
           </View>
         )}
 
-        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1. The bottom
-            padding picks the larger of `spacing.lg` and the device's
-            home-indicator inset, so the input clears the iPhone X+ home
-            indicator when the keyboard is closed. When the keyboard opens,
-            KAV lifts the whole row above the keyboard top regardless. */}
+        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1. When the
+            keyboard is closed, the bottom padding picks the larger of
+            `spacing.lg` and the home-indicator inset. When the keyboard
+            is open, the sheet is lifted by `marginBottom: kbHeight` so the
+            home indicator is already covered by the keyboard — collapse
+            the padding to `spacing.sm` to avoid an unnecessary gap above
+            the keyboard top. */}
         {!composerHidden && (
           <View
             style={[
               styles.inputRow,
-              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+              {
+                paddingBottom:
+                  kbHeight > 0 ? spacing.sm : Math.max(insets.bottom, spacing.lg),
+              },
             ]}
           >
             <TextInput
@@ -336,8 +364,10 @@ export default function ChatWidget({
               returnKeyType="send"
               editable={!loading}
               onFocus={() => {
-                // KAV compresses the FlatList when the keyboard opens;
-                // re-pin to the newest message so it stays visible.
+                // Belt-and-suspenders re-pin: the keyboard listener also
+                // calls scrollToEnd on `keyboardWill/DidShow`, but onFocus
+                // fires a hair earlier on iOS — keeps the newest message
+                // visible the instant the sheet lifts.
                 setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
               }}
             />
@@ -353,7 +383,7 @@ export default function ChatWidget({
             </TouchableOpacity>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
     </Animated.View>
   );
 }
