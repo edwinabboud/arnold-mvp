@@ -17,6 +17,7 @@ import {
   Animated,
   StyleSheet,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatMessage, ChatOption } from "../../types/logging";
 import { colors, typography, spacing, radius } from "../../theme";
 
@@ -189,6 +190,10 @@ export default function ChatWidget({
   const [input, setInput] = useState("");
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  // Bottom inset for home-indicator clearance on iPhone X+ — applied only to
+  // the input row, never to keyboardVerticalOffset (offset 0 is required for
+  // the bottom-anchored sheet, per the post-crash fix).
+  const insets = useSafeAreaInsets();
 
   // Animate open/close
   useEffect(() => {
@@ -242,29 +247,30 @@ export default function ChatWidget({
       style={[styles.container, { transform: [{ translateY }] }]}
     >
       {/*
-       * The container is a fixed-height (75%) absolute bottom-sheet anchored
-       * at `bottom: 0`. When the keyboard opens, its top edge lands somewhere
-       * inside the sheet — anything below that line is covered. We use
-       * KeyboardAvoidingView with `behavior="padding"` so it adds bottom
-       * padding equal to the keyboard height *inside* the sheet. The
-       * messages FlatList is `flex: 1` and the input row is fixed-height,
-       * so the padding compresses the list and lifts the input row up by
-       * exactly the obscured amount — the input ends up flush with the
-       * keyboard top, conversation stays visible above it.
+       * Near-full-height (92%) absolute bottom-sheet anchored at `bottom: 0`,
+       * leaving a small peek of the workout screen at the top. WhatsApp-style
+       * column: header (fixed) → FlatList (flex:1, scrolls, newest at bottom)
+       * → input row (fixed, pinned to bottom).
        *
-       * `keyboardVerticalOffset={0}` because the sheet is anchored at
-       * `bottom: 0` — there's no gap to account for. (An earlier attempt
-       * passed `insets.top` here, which over-padded and pushed the input
-       * off-screen on notched devices.)
+       * KeyboardAvoidingView with `behavior="padding"` adds bottom padding
+       * equal to the keyboard height *inside* the sheet when typing. Because
+       * the FlatList is `flex: 1` and the input row is fixed-height, the
+       * padding compresses the list and lifts the input row up by the
+       * keyboard height — the input ends up flush above the keyboard,
+       * conversation stays visible above it. `keyboardVerticalOffset={0}`
+       * because the sheet is anchored at `bottom: 0` — no gap to account
+       * for. (An earlier attempt passed `insets.top` here, which over-padded
+       * and pushed the input off-screen on notched devices.)
        *
-       * We do NOT touch the parent Animated.View's transform: that's
-       * `useNativeDriver: true`. Mixing a JS-driven layout animation
-       * (`bottom`) with a native-driven transform on the same node
-       * crashes the app — that was the 961673b regression this fix
-       * replaces.
+       * CRITICAL CRASH GUARD: the parent Animated.View carries ONLY a
+       * native-driven `translateY` transform. Mixing a JS-driven layout
+       * animation (e.g. animating `bottom`) with a native-driven transform
+       * on the same node crashes the app — that was the 961673b regression.
+       * Keyboard avoidance lives in KeyboardAvoidingView, which is a layout
+       * component — no animated-driver involvement on the container.
        *
-       * Android: behavior is undefined — Android handles soft-keyboard
-       * via the activity's `windowSoftInputMode`, which Expo sets to
+       * Android: behavior is undefined — Android handles soft-keyboard via
+       * the activity's `windowSoftInputMode`, which Expo sets to
        * `adjustResize` by default.
        */}
       <KeyboardAvoidingView
@@ -283,7 +289,10 @@ export default function ChatWidget({
           </View>
         </View>
 
-        {/* Messages */}
+        {/* Messages — flex:1 so it fills space between header and input row,
+            pushing the input row to the bottom of the sheet. Newest message
+            sits at the visual bottom because content stacks top-down and
+            auto-scrollToEnd pins the latest into view. */}
         <FlatList
           ref={listRef}
           data={messages}
@@ -291,6 +300,7 @@ export default function ChatWidget({
           renderItem={({ item }) => (
             <MessageBubble message={item} onTapOption={onTapOption} />
           )}
+          style={styles.list}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
         />
@@ -304,9 +314,18 @@ export default function ChatWidget({
           </View>
         )}
 
-        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1 */}
+        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1. The bottom
+            padding picks the larger of `spacing.lg` and the device's
+            home-indicator inset, so the input clears the iPhone X+ home
+            indicator when the keyboard is closed. When the keyboard opens,
+            KAV lifts the whole row above the keyboard top regardless. */}
         {!composerHidden && (
-          <View style={styles.inputRow}>
+          <View
+            style={[
+              styles.inputRow,
+              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+            ]}
+          >
             <TextInput
               style={styles.textInput}
               value={input}
@@ -347,7 +366,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: "75%",
+    height: "92%",
     backgroundColor: colors.bgCard,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -357,6 +376,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   keyboardView: {
+    flex: 1,
+  },
+  list: {
     flex: 1,
   },
   header: {
@@ -558,13 +580,12 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.accent}60`,
   },
 
-  // Input
+  // Input — paddingBottom is set inline based on safe-area inset.
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    paddingBottom: Platform.OS === "ios" ? spacing.lg : spacing.md,
     gap: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.04)",
