@@ -12,13 +12,11 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Keyboard,
+  KeyboardAvoidingView,
   Platform,
   Animated,
   StyleSheet,
 } from "react-native";
-import type { KeyboardEvent } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatMessage, ChatOption } from "../../types/logging";
 import { colors, typography, spacing, radius } from "../../theme";
 
@@ -191,20 +189,6 @@ export default function ChatWidget({
   const [input, setInput] = useState("");
   const listRef = useRef<FlatList>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const insets = useSafeAreaInsets();
-
-  // Track keyboard height as an Animated.Value applied to the container's
-  // `bottom`. The container is a fixed-height (75%) absolute bottom sheet,
-  // so KeyboardAvoidingView's internal padding has nowhere to push — the
-  // box's bottom is anchored to 0 and stays behind the keyboard. We instead
-  // lift the entire sheet by the keyboard height, animated to match the
-  // keyboard's own duration so it slides rather than jumps.
-  //
-  // `bottom` is a layout property (useNativeDriver: false). The existing
-  // `translateY` open/close transform uses the native driver — they
-  // compose cleanly on the same Animated.View (separate animation systems
-  // applied to disjoint style fields).
-  const keyboardOffset = useRef(new Animated.Value(0)).current;
 
   // Animate open/close
   useEffect(() => {
@@ -224,40 +208,6 @@ export default function ChatWidget({
       }, 100);
     }
   }, [messages.length]);
-
-  // Keyboard lift — iOS uses `keyboardWillShow/Hide` (carry a duration on
-  // the event) for a frame-locked animation; Android only ships
-  // `keyboardDidShow/Hide` and no duration on most versions, so we fall
-  // back to a sane default. Subscriptions are cleaned up on unmount.
-  useEffect(() => {
-    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-
-    const onShow = (e: KeyboardEvent) => {
-      Animated.timing(keyboardOffset, {
-        toValue: e.endCoordinates.height,
-        duration: e.duration ?? 250,
-        useNativeDriver: false,
-      }).start();
-      // Latest message can otherwise sit just behind the lifted input row.
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-    };
-
-    const onHide = (e: KeyboardEvent) => {
-      Animated.timing(keyboardOffset, {
-        toValue: 0,
-        duration: e.duration ?? 200,
-        useNativeDriver: false,
-      }).start();
-    };
-
-    const showSub = Keyboard.addListener(showEvt, onShow);
-    const hideSub = Keyboard.addListener(hideEvt, onHide);
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [keyboardOffset]);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
@@ -289,16 +239,39 @@ export default function ChatWidget({
 
   return (
     <Animated.View
-      style={[
-        styles.container,
-        { transform: [{ translateY }], bottom: keyboardOffset },
-      ]}
+      style={[styles.container, { transform: [{ translateY }] }]}
     >
-      {/* Was KeyboardAvoidingView (behavior="padding") — the container lift
-          above now handles keyboard avoidance directly; this wrapper is a
-          plain View so the inner layout (header / messages / input) stays
-          intact without a redundant padding pass. */}
-      <View style={styles.keyboardView}>
+      {/*
+       * The container is a fixed-height (75%) absolute bottom-sheet anchored
+       * at `bottom: 0`. When the keyboard opens, its top edge lands somewhere
+       * inside the sheet — anything below that line is covered. We use
+       * KeyboardAvoidingView with `behavior="padding"` so it adds bottom
+       * padding equal to the keyboard height *inside* the sheet. The
+       * messages FlatList is `flex: 1` and the input row is fixed-height,
+       * so the padding compresses the list and lifts the input row up by
+       * exactly the obscured amount — the input ends up flush with the
+       * keyboard top, conversation stays visible above it.
+       *
+       * `keyboardVerticalOffset={0}` because the sheet is anchored at
+       * `bottom: 0` — there's no gap to account for. (An earlier attempt
+       * passed `insets.top` here, which over-padded and pushed the input
+       * off-screen on notched devices.)
+       *
+       * We do NOT touch the parent Animated.View's transform: that's
+       * `useNativeDriver: true`. Mixing a JS-driven layout animation
+       * (`bottom`) with a native-driven transform on the same node
+       * crashes the app — that was the 961673b regression this fix
+       * replaces.
+       *
+       * Android: behavior is undefined — Android handles soft-keyboard
+       * via the activity's `windowSoftInputMode`, which Expo sets to
+       * `adjustResize` by default.
+       */}
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={0}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerHandle} />
@@ -343,6 +316,11 @@ export default function ChatWidget({
               onSubmitEditing={handleSend}
               returnKeyType="send"
               editable={!loading}
+              onFocus={() => {
+                // KAV compresses the FlatList when the keyboard opens;
+                // re-pin to the newest message so it stays visible.
+                setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+              }}
             />
             <TouchableOpacity
               style={[
@@ -356,7 +334,7 @@ export default function ChatWidget({
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </KeyboardAvoidingView>
     </Animated.View>
   );
 }
