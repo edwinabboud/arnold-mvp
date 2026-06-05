@@ -45,6 +45,19 @@ export interface UseChatServiceReturn {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Yield to the renderer so React paints the queued state (user bubble +
+ * typing indicator) BEFORE the synchronous v2.4.8 context-packet build
+ * blocks the JS thread. Without this, `setIsLoading(true)` is enqueued in
+ * the same tick as the heavy `buildContextPacket` work, and the indicator
+ * doesn't appear until the response lands — the chat feels frozen on send.
+ */
+function yieldToPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
 function makeId(prefix: string = 'msg'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -233,6 +246,7 @@ export function useChatService(): UseChatServiceReturn {
 
     // Route through conversation agent for Arnold's voice
     setIsLoading(true);
+    await yieldToPaint();
     try {
       const response = await callArnold(
         { type: 'pain_report', bodyArea: bodyPart, severity },
@@ -357,6 +371,7 @@ export function useChatService(): UseChatServiceReturn {
 
     // ── From here, everything calls the API ──
     setIsLoading(true);
+    await yieldToPaint();
     try {
       const info = getCurrentExerciseInfo();
       const ctx = buildCoachingContext();
@@ -425,6 +440,7 @@ export function useChatService(): UseChatServiceReturn {
     if (option.action === 'decision') {
       // Plan change accept/reject
       setIsLoading(true);
+      await yieldToPaint();
       try {
         const ctx = buildCoachingContext();
         const response = await callArnold(

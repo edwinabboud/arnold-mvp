@@ -13,13 +13,22 @@ import {
   TouchableOpacity,
   FlatList,
   Keyboard,
+  LayoutAnimation,
   Platform,
+  UIManager,
   Animated,
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChatMessage, ChatOption } from "../../types/logging";
 import { colors, typography, spacing, radius } from "../../theme";
+
+// LayoutAnimation drives the keyboard-lift glide (see `setKbHeight` calls
+// below). On Android, the API ships disabled and must be opted in once at
+// module load — iOS has it on by default.
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +48,48 @@ const BODY_PARTS = [
   "Shoulder", "Elbow", "Wrist", "Lower back",
   "Knee", "Neck", "Hip", "Ankle",
 ];
+
+// ── Typing Indicator (animated, native-driven) ──────────────────────────────
+//
+// Three dots that pulse in opacity, staggered. Lives in its own subtree
+// well below the chat container's Animated.View, so its native driver
+// does not interact with the container — no chance of the 961673b
+// crash class.
+//
+// (The previous static dots used `animationDelay: "0.2s"` — a CSS web
+// prop that does nothing in RN and shows up as a TS error in the baseline.
+// Those errors disappear with this component.)
+
+function TypingIndicator() {
+  const dots = [
+    useRef(new Animated.Value(0.3)).current,
+    useRef(new Animated.Value(0.3)).current,
+    useRef(new Animated.Value(0.3)).current,
+  ];
+
+  useEffect(() => {
+    const loops = dots.map((val, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(val, { toValue: 1, duration: 380, useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0.3, duration: 380, useNativeDriver: true }),
+        ]),
+      ),
+    );
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <View style={styles.typingRow}>
+      {dots.map((val, i) => (
+        <Animated.View key={i} style={[styles.typingDot, { opacity: val }]} />
+      ))}
+    </View>
+  );
+}
 
 // ── Message Bubble ──────────────────────────────────────────────────────────
 
@@ -204,13 +255,14 @@ export default function ChatWidget({
   // lifting the input row.
   const [kbHeight, setKbHeight] = useState(0);
 
-  // Animate open/close
+  // Animate open/close — softer spring than the earlier (65/11) config so
+  // the sheet glides in rather than snapping.
   useEffect(() => {
     Animated.spring(slideAnim, {
       toValue: isOpen ? 1 : 0,
       useNativeDriver: true,
-      tension: 65,
-      friction: 11,
+      tension: 40,
+      friction: 8,
     }).start();
   }, [isOpen]);
 
@@ -226,16 +278,45 @@ export default function ChatWidget({
   // Track keyboard height in plain state. iOS gets `keyboardWillShow/Hide`
   // (fires slightly before the keyboard animates in, matches the system
   // curve more naturally); Android only ships `keyboardDidShow/Hide`.
+  //
+  // We call `LayoutAnimation.configureNext` immediately before each
+  // `setKbHeight` so the resulting `marginBottom` change on the container
+  // glides instead of snapping. This is intentionally LayoutAnimation, NOT
+  // Animated — LayoutAnimation animates layout at the native-layout level
+  // and does NOT create an Animated.Value, so the container's lone
+  // native-driven `translateY` transform is unaffected. (Mixing an
+  // Animated.Value lift with the native-driven transform was the 961673b
+  // crash; LayoutAnimation has no such risk.)
   useEffect(() => {
     const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSub = Keyboard.addListener(showEvt, (e) => {
+      // iOS keyboard events carry a duration matching the system curve;
+      // Android usually doesn't — fall back to a sane default.
+      const duration = (e as { duration?: number }).duration ?? 250;
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(
+          duration,
+          LayoutAnimation.Types.easeInEaseOut,
+          LayoutAnimation.Properties.opacity,
+        ),
+      );
       setKbHeight(e.endCoordinates.height);
       // Latest message would otherwise sit just behind the input row
       // after the sheet lifts.
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     });
-    const hideSub = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    const hideSub = Keyboard.addListener(hideEvt, (e) => {
+      const duration = (e as { duration?: number }).duration ?? 200;
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(
+          duration,
+          LayoutAnimation.Types.easeInEaseOut,
+          LayoutAnimation.Properties.opacity,
+        ),
+      );
+      setKbHeight(0);
+    });
     return () => {
       showSub.remove();
       hideSub.remove();
@@ -328,14 +409,8 @@ export default function ChatWidget({
           showsVerticalScrollIndicator={false}
         />
 
-        {/* Typing indicator */}
-        {loading && (
-          <View style={styles.typingRow}>
-            <View style={styles.typingDot} />
-            <View style={[styles.typingDot, { animationDelay: "0.2s" }]} />
-            <View style={[styles.typingDot, { animationDelay: "0.4s" }]} />
-          </View>
-        )}
+        {/* Typing indicator — animated pulse, replaces the prior static dots. */}
+        {loading && <TypingIndicator />}
 
         {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1. When the
             keyboard is closed, the bottom padding picks the larger of
