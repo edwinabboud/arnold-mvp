@@ -12,23 +12,30 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Keyboard,
-  LayoutAnimation,
-  Platform,
-  UIManager,
   Animated,
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  interpolate,
+} from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { ChatMessage, ChatOption } from "../../types/logging";
 import { colors, typography, spacing, radius } from "../../theme";
 
-// LayoutAnimation drives the keyboard-lift glide (see `setKbHeight` calls
-// below). On Android, the API ships disabled and must be opted in once at
-// module load — iOS has it on by default.
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// `Animated` (the old RN API) is kept ONLY for the TypingIndicator's three
+// pulsing dots — they live in their own subtree and never share a node with
+// the chat container, so there's no animation-system conflict.
+//
+// The chat container itself uses Reanimated (`Reanimated.View`). Both the
+// open/close lift and the keyboard tracking are combined into ONE
+// `useAnimatedStyle` transform on the container, so there is exactly one
+// animation system driving the container's transform. This is the post-
+// crash guarantee: never stack the RN Animated transform AND a Reanimated
+// transform on the same view.
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -240,33 +247,43 @@ export default function ChatWidget({
 }: ChatWidgetProps) {
   const [input, setInput] = useState("");
   const listRef = useRef<FlatList>(null);
-  const slideAnim = useRef(new Animated.Value(0)).current;
   // Bottom inset for home-indicator clearance on iPhone X+ — applied only to
   // the input row, never as a vertical offset for any keyboard math.
   const insets = useSafeAreaInsets();
-  // Keyboard height as a *plain* useState number — NOT an Animated.Value.
-  // Applied as `marginBottom` on the container so the whole sheet
-  // (including the bottom-pinned input row) lifts above the keyboard. A
-  // plain number is a re-render, not an animation, so it CANNOT conflict
-  // with the native-driven `translateY` on the same node (that mix was
-  // the 961673b crash). KeyboardAvoidingView with behavior="padding"
-  // didn't work here because the sheet is a fixed-height absolute
-  // container — padding inside it gets absorbed/clipped rather than
-  // lifting the input row.
-  const [kbHeight, setKbHeight] = useState(0);
 
-  // Animate open/close — softer spring than the earlier (65/11) config so
-  // the sheet glides in rather than snapping.
+  // ── Animation system: Reanimated, single transform on the container ─────
+  //
+  // `openProgress` (0 → 1) drives the open/close lift; the keyboard
+  // animation comes in as Reanimated shared values from
+  // `useReanimatedKeyboardAnimation`. Both feed a SINGLE `useAnimatedStyle`
+  // transform on the container, so the container has exactly one animation
+  // system driving it. This is the post-961673b invariant.
+  const openProgress = useSharedValue(0);
   useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: isOpen ? 1 : 0,
-      useNativeDriver: true,
-      tension: 40,
-      friction: 8,
-    }).start();
-  }, [isOpen]);
+    openProgress.value = withSpring(isOpen ? 1 : 0, {
+      damping: 16,
+      stiffness: 90,
+      mass: 1,
+    });
+  }, [isOpen, openProgress]);
 
-  // Auto-scroll to bottom
+  // Native keyboard tracking. `height` is the y-coordinate of the keyboard's
+  // top edge as a Reanimated shared value — negative when the keyboard is
+  // visible (e.g. -300), zero when it's closed. Updated frame-by-frame on
+  // the UI thread, so applying it as `translateY` makes the sheet move in
+  // lockstep with the keyboard.
+  const keyboard = useReanimatedKeyboardAnimation();
+
+  const animatedContainerStyle = useAnimatedStyle(() => {
+    // Off-screen at 600px when closed, settled at 0 when open. Add the
+    // keyboard's (negative) y on top so the sheet lifts with the keyboard.
+    const openTY = interpolate(openProgress.value, [0, 1], [600, 0]);
+    return {
+      transform: [{ translateY: openTY + keyboard.height.value }],
+    };
+  });
+
+  // Auto-scroll to bottom on new message.
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
@@ -274,54 +291,6 @@ export default function ChatWidget({
       }, 100);
     }
   }, [messages.length]);
-
-  // Track keyboard height in plain state. iOS gets `keyboardWillShow/Hide`
-  // (fires slightly before the keyboard animates in, matches the system
-  // curve more naturally); Android only ships `keyboardDidShow/Hide`.
-  //
-  // We call `LayoutAnimation.configureNext` immediately before each
-  // `setKbHeight` so the resulting `marginBottom` change on the container
-  // glides instead of snapping. This is intentionally LayoutAnimation, NOT
-  // Animated — LayoutAnimation animates layout at the native-layout level
-  // and does NOT create an Animated.Value, so the container's lone
-  // native-driven `translateY` transform is unaffected. (Mixing an
-  // Animated.Value lift with the native-driven transform was the 961673b
-  // crash; LayoutAnimation has no such risk.)
-  useEffect(() => {
-    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvt, (e) => {
-      // iOS keyboard events carry a duration matching the system curve;
-      // Android usually doesn't — fall back to a sane default.
-      const duration = (e as { duration?: number }).duration ?? 250;
-      LayoutAnimation.configureNext(
-        LayoutAnimation.create(
-          duration,
-          LayoutAnimation.Types.easeInEaseOut,
-          LayoutAnimation.Properties.opacity,
-        ),
-      );
-      setKbHeight(e.endCoordinates.height);
-      // Latest message would otherwise sit just behind the input row
-      // after the sheet lifts.
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
-    });
-    const hideSub = Keyboard.addListener(hideEvt, (e) => {
-      const duration = (e as { duration?: number }).duration ?? 200;
-      LayoutAnimation.configureNext(
-        LayoutAnimation.create(
-          duration,
-          LayoutAnimation.Types.easeInEaseOut,
-          LayoutAnimation.Properties.opacity,
-        ),
-      );
-      setKbHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
@@ -344,42 +313,26 @@ export default function ChatWidget({
     return false;
   })();
 
-  const translateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [600, 0],
-  });
-
   if (!isOpen) return null;
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        { transform: [{ translateY }] },
-        // Plain number from useState — re-render, NOT an animation. Lifts
-        // the whole sheet (incl. bottom-pinned input row) above the
-        // keyboard. Because this is a JS layout value (not an
-        // Animated.Value), it CANNOT conflict with the native-driven
-        // `translateY` above. KeyboardAvoidingView was removed: its
-        // `behavior="padding"` was unreliable inside this fixed-height
-        // absolute sheet.
-        { marginBottom: kbHeight },
-      ]}
-    >
+    <Reanimated.View style={[styles.container, animatedContainerStyle]}>
       {/*
        * Near-full-height (92%) absolute bottom-sheet anchored at `bottom: 0`,
        * leaving a small peek of the workout screen at the top. WhatsApp-style
        * column: header (fixed) → FlatList (flex:1, scrolls, newest at bottom)
        * → input row (fixed, pinned to bottom).
        *
-       * CRITICAL CRASH GUARD: the parent Animated.View carries ONLY a
-       * native-driven `translateY` transform. The `marginBottom: kbHeight`
-       * above is a plain useState number — applying it triggers a normal
-       * re-render, not an Animated update — so there is no second animated
-       * driver on the node. Mixing a JS-driven Animated.Value with a
-       * native-driven transform on the same node crashes the app (961673b).
-       * NEVER convert `kbHeight` to `Animated.Value` without also moving
-       * `translateY` off the native driver. Re-render ≠ animation.
+       * CRITICAL CRASH GUARD: the container is a Reanimated.View driven by a
+       * SINGLE `useAnimatedStyle` transform. That style combines two
+       * Reanimated shared values (open/close `openProgress` + native
+       * keyboard tracking from `useReanimatedKeyboardAnimation`) into one
+       * `translateY`. There is exactly one animation system on this node.
+       * The RN `Animated` import is used ONLY by the TypingIndicator dots
+       * in their own subtree — they never share a node with the container.
+       * Do NOT add an RN `Animated.View` transform alongside the Reanimated
+       * one on this container — that's the same class of conflict as
+       * 961673b (different APIs, same trap).
        */}
       <View style={styles.keyboardView}>
         {/* Header */}
@@ -412,21 +365,18 @@ export default function ChatWidget({
         {/* Typing indicator — animated pulse, replaces the prior static dots. */}
         {loading && <TypingIndicator />}
 
-        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1. When the
-            keyboard is closed, the bottom padding picks the larger of
-            `spacing.lg` and the home-indicator inset. When the keyboard
-            is open, the sheet is lifted by `marginBottom: kbHeight` so the
-            home indicator is already covered by the keyboard — collapse
-            the padding to `spacing.sm` to avoid an unnecessary gap above
-            the keyboard top. */}
+        {/* Input — hidden for pure-tappable turns per v2.4.8 §5.1. The
+            bottom padding picks the larger of `spacing.lg` and the
+            home-indicator inset so the input clears the iPhone X+ home
+            indicator. When the keyboard is open, the sheet is lifted
+            natively by the keyboard-controller transform; this padding
+            then shows as a small (24–34pt) clearance above the keyboard
+            top, which is acceptable and matches HIG-style buffering. */}
         {!composerHidden && (
           <View
             style={[
               styles.inputRow,
-              {
-                paddingBottom:
-                  kbHeight > 0 ? spacing.sm : Math.max(insets.bottom, spacing.lg),
-              },
+              { paddingBottom: Math.max(insets.bottom, spacing.lg) },
             ]}
           >
             <TextInput
@@ -437,12 +387,15 @@ export default function ChatWidget({
               placeholderTextColor={colors.textMuted}
               onSubmitEditing={handleSend}
               returnKeyType="send"
-              editable={!loading}
+              /*
+               * `editable` is intentionally always true. WhatsApp-style:
+               * the user can keep typing the next message while Arnold's
+               * reply is still in flight. Send is still gated on `loading`
+               * below so two requests can't fire at once.
+               */
               onFocus={() => {
-                // Belt-and-suspenders re-pin: the keyboard listener also
-                // calls scrollToEnd on `keyboardWill/DidShow`, but onFocus
-                // fires a hair earlier on iOS — keeps the newest message
-                // visible the instant the sheet lifts.
+                // Re-pin the newest message the moment the keyboard
+                // begins to appear, before the native lift completes.
                 setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
               }}
             />
@@ -459,7 +412,7 @@ export default function ChatWidget({
           </View>
         )}
       </View>
-    </Animated.View>
+    </Reanimated.View>
   );
 }
 
