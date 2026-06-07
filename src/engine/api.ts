@@ -33,6 +33,7 @@ import {
   SilentAdaptationResult,
 } from "./silentAdaptation";
 import { buildContextPacket, contextPacketToString } from "./contextPacket";
+import { buildChatContextStringV248 } from "./chatContext";
 import { buildE1RMProfile } from "./weightEngine";
 import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptationQueue";
 
@@ -187,9 +188,24 @@ async function callAgent(
       .filter(Boolean)
       .join("\n");
 
+    if (__DEV__) {
+      console.log(`[Arnold] ${agent} agent OK`, {
+        status: response.status,
+        textLen: (text || "").length,
+        preview: (text || "").slice(0, 80),
+      });
+    }
     return text || "";
   } catch (error) {
+    // Visible in any build via console.error; dev builds also get the
+    // explicit "FALLBACK FIRING" tag so device logs make the cause
+    // unambiguous when triaging "why is Arnold answering generically?".
     console.error(`[Arnold] ${agent} agent error:`, error);
+    if (__DEV__) {
+      console.log(
+        `[Arnold] ${agent} agent FALLBACK FIRING — returning canned "Let me think about that. Try again in a sec."`,
+      );
+    }
     return JSON.stringify({
       message: "Let me think about that. Try again in a sec.",
       tone: "neutral",
@@ -216,34 +232,63 @@ export async function routeInteraction(
 ): Promise<ChatMessage> {
   const now = new Date().toISOString();
 
-  // Build rich context from knowledge base
-  const e1rmProfile = coachingContext.todaysSession
-    ? buildE1RMProfile({
-        bodyweightKg: 70, // TODO: get from user profile when passed in
-        pullUpMaxReps: 0,
-        dipMaxReps: 0,
-      })
-    : null;
-
+  // ── v2.4.8 packet first; v1 only as fallback ─────────────────────────────
+  // The v2.4.8 ConversationContextPacket pulls real values from the store:
+  // completedSession, 5+5 history window, recovery block, real e1rm from
+  // benchmarks, structured pendingAdaptations. The v1 path here used to feed
+  // hardcoded { bodyweight: 70, week: 1, pullUpReps: 0, dipReps: 0 } — which
+  // produced an empty e1rm profile and no completed-session block, leaving
+  // the conversation agent with nothing path-specific to reference and
+  // forcing generic prose. v1 is retained ONLY for the edge case where the
+  // store has no profile yet (very early lifecycle).
   let contextStr: string;
-  try {
-    const weekNumber = 1; // TODO: derive from mesocycle state
-    const packet = buildContextPacket({
-      path: coachingContext.programPath,
-      tier: coachingContext.tier,
-      phase: coachingContext.currentPhase,
-      weekNumber,
-      session: coachingContext.todaysSession,
-      bodyweightKg: 70,
-      e1rmProfile,
-    });
-    contextStr = contextPacketToString(packet);
-  } catch {
-    // Fallback to minimal context if knowledge base fails
-    contextStr = JSON.stringify({
-      phase: coachingContext.currentPhase,
-      programPath: coachingContext.programPath,
-      tier: coachingContext.tier,
+  let contextSource: "v2.4.8" | "v1-fallback" = "v2.4.8";
+  const v248Str = (() => {
+    try {
+      return buildChatContextStringV248();
+    } catch (err) {
+      console.error("[Arnold] v2.4.8 packet build threw — falling back to v1", err);
+      return null;
+    }
+  })();
+
+  if (v248Str) {
+    contextStr = v248Str;
+  } else {
+    contextSource = "v1-fallback";
+    // Original v1 behaviour — kept verbatim for the no-profile edge case.
+    const e1rmProfile = coachingContext.todaysSession
+      ? buildE1RMProfile({
+          bodyweightKg: 70, // TODO: get from user profile when passed in
+          pullUpMaxReps: 0,
+          dipMaxReps: 0,
+        })
+      : null;
+    try {
+      const weekNumber = 1; // TODO: derive from mesocycle state
+      const packet = buildContextPacket({
+        path: coachingContext.programPath,
+        tier: coachingContext.tier,
+        phase: coachingContext.currentPhase,
+        weekNumber,
+        session: coachingContext.todaysSession,
+        bodyweightKg: 70,
+        e1rmProfile,
+      });
+      contextStr = contextPacketToString(packet);
+    } catch {
+      contextStr = JSON.stringify({
+        phase: coachingContext.currentPhase,
+        programPath: coachingContext.programPath,
+        tier: coachingContext.tier,
+      });
+    }
+  }
+
+  if (__DEV__) {
+    console.log(`[Arnold] routeInteraction context: ${contextSource}`, {
+      action: action.type,
+      contextLen: contextStr.length,
     });
   }
 
@@ -252,10 +297,15 @@ export async function routeInteraction(
     contextStr += `\n\nRules decision: ${JSON.stringify(rulesDecision)}`;
   }
 
-  // Append pending adaptations
-  const pendingAdaptations = adaptationQueue ? getUnsurfacedItems(adaptationQueue) : [];
-  if (pendingAdaptations.length > 0) {
-    contextStr += `\n\nPending adaptations (surface these to the user): ${formatForChat(pendingAdaptations)}`;
+  // Append pending adaptations as a plain string ONLY on the v1 fallback. The
+  // v2.4.8 packet already includes a structured `PENDING ADAPTATIONS` block
+  // serialized by conversationContextPacketToString — re-appending here
+  // would just duplicate the same data.
+  if (contextSource === "v1-fallback") {
+    const pendingAdaptations = adaptationQueue ? getUnsurfacedItems(adaptationQueue) : [];
+    if (pendingAdaptations.length > 0) {
+      contextStr += `\n\nPending adaptations (surface these to the user): ${formatForChat(pendingAdaptations)}`;
+    }
   }
 
   contextStr += `\n\nStreaks: ${coachingContext.streaks.currentDaily} day streak, ${coachingContext.streaks.totalSessions} total sessions.`;
