@@ -294,7 +294,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
   // Part 2 will materialise the cuts.
   const handleSessionTierSelect = (tier: "compact" | "standard" | "recommended") => {
     setSessionTier(tier);
-    captureSessionLengthSelected({ tier });
+    captureSessionLengthSelected({ session_tier: tier });
     goToStep(8);
   };
 
@@ -461,7 +461,14 @@ export default function ConversationalOnboarding({ navigation }: any) {
     }
     setActiveMesocycle(mesocycle);
 
-    capturePlanGenerated({ path: selectedPath as any, tier });
+    // `sessionTier` is the user's onboarding pick (compact|standard|recommended);
+    // `tier` here is the experience tier returned by assignTier. Keep them
+    // distinct on the wire so a persistence regression on either can be seen.
+    capturePlanGenerated({
+      path: selectedPath as any,
+      experience_tier: tier,
+      session_tier: sessionTier ?? null,
+    });
 
     console.log('[ARNOLD] Plan generated:', {
       programPath: mesocycle.programPath,

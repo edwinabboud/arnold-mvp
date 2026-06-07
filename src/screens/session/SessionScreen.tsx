@@ -704,10 +704,21 @@ export default function SessionScreen({ navigation, route }: any) {
     if (startedAnalyticsFired.current) return;
     startedAnalyticsFired.current = true;
     const profile = useStore.getState().profile;
+    // Both tier-shaped values are emitted distinctly:
+    //   experience_tier ← assignTier output stored on the profile
+    //   session_tier    ← onboarding session-length preference
+    // session_tier is emitted as explicit `null` (not omitted) when the source
+    // is missing so a persistence regression is visible in the funnel.
+    const sessionTierRaw = profile?.schedule?.sessionTier;
+    const sessionTier =
+      sessionTierRaw === "compact" || sessionTierRaw === "standard" || sessionTierRaw === "recommended"
+        ? sessionTierRaw
+        : null;
     captureSessionStarted({
       path: (profile?.programPath as any) || "hybrid_athlete",
       session_type: session.phase || "unknown",
-      tier: profile?.tier || "unknown",
+      experience_tier: profile?.tier || "unknown",
+      session_tier: sessionTier,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

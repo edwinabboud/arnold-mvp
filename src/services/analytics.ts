@@ -97,7 +97,7 @@ export function captureScheduleSet(props: { days_per_week: number }): void {
   send("schedule_set", props);
 }
 
-export function captureSessionLengthSelected(props: { tier: SessionTier }): void {
+export function captureSessionLengthSelected(props: { session_tier: SessionTier }): void {
   send("session_length_selected", props);
 }
 
@@ -105,14 +105,31 @@ export function captureAssessmentCompleted(): void {
   send("assessment_completed");
 }
 
-export function capturePlanGenerated(props: { path: ProgramPath; tier: string }): void {
+/**
+ * Two distinct concepts are kept distinct on every plan/session event:
+ *   - `experience_tier`: beginner | intermediate | advanced (assignTier output)
+ *   - `session_tier`:    compact | standard | recommended (sessionTier — the
+ *                        session-length preference from onboarding)
+ * They used to collide under the property name `tier`. Never reintroduce
+ * that name on events that carry either of these.
+ *
+ * `session_tier` is nullable so we can explicitly send `null` (vs omitting)
+ * when the source hasn't been written yet — distinguishes "no preference"
+ * from "lost in plumbing" during persistence-bug investigations.
+ */
+export function capturePlanGenerated(props: {
+  path: ProgramPath;
+  experience_tier: string;
+  session_tier: SessionTier | null;
+}): void {
   send("plan_generated", props);
 }
 
 export function captureSessionStarted(props: {
   path: ProgramPath;
   session_type: string;
-  tier: string;
+  experience_tier: string;
+  session_tier: SessionTier | null;
 }): void {
   send("session_started", props);
 }
