@@ -19,6 +19,7 @@ import {
 import { ChatMessage, ChatOption } from '../types/logging';
 import { CoachingContext, PainReport, PlannedExercise } from '../types';
 import { markAsSurfaced, getUnsurfacedItems, addToQueue } from '../engine/adaptationQueue';
+import { captureAdaptationSurfaced } from '../services/analytics';
 import {
   ReviewState,
   createReviewState,
@@ -167,6 +168,12 @@ export function useChatService(): UseChatServiceReturn {
     if (unsurfaced.length > 0) {
       const updated = markAsSurfaced(store.adaptationQueue, unsurfaced.map(i => i.id));
       store.setAdaptationQueue(updated);
+      // One event per adaptation type that just got surfaced. We capture per
+      // *type* (not per item) so a session that surfaces three weight bumps
+      // doesn't triple-inflate the funnel — but a weight bump + a rep change
+      // surfaces twice as expected.
+      const typesSurfaced = new Set(unsurfaced.map((i) => i.type as string));
+      typesSurfaced.forEach((t) => captureAdaptationSurfaced({ adaptation_type: t }));
     }
 
     return response;

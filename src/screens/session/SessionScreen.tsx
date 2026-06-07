@@ -36,6 +36,14 @@ import { tryQuickResponse, routeInteraction } from "../../engine/api";
 import { useChatService } from '../../hooks/useChatService';
 import ArnoldWaveform from "../../components/waveform/ArnoldWaveform";
 import ChatWidget from "../../components/chat/ChatWidget";
+import {
+  captureSessionStarted,
+  captureSessionCompleted,
+  captureSessionAbandoned,
+  captureWarmupSkipped,
+  captureChatOpened,
+  captureChatMessageSent,
+} from "../../services/analytics";
 import ExerciseDetail from "../../components/exercise/ExerciseDetail";
 
 // ── Notifications (MVP 1.16) ─────────────────────────────────────────────────
@@ -684,6 +692,80 @@ export default function SessionScreen({ navigation, route }: any) {
     }
   }, []);
 
+  // ── Analytics: session lifecycle ─────────────────────────────────────────
+  // Fired once on mount. Resuming a paused session also re-fires this — we
+  // treat each foregrounded entry into the workout as a "session_started"
+  // event from a product-funnel perspective; the alternative (only the very
+  // first entry) is hard to disambiguate from a resume and gives a noisy
+  // funnel.
+  const startedAnalyticsFired = useRef(false);
+  const sessionAbandonedRef = useRef(false);
+  useEffect(() => {
+    if (startedAnalyticsFired.current) return;
+    startedAnalyticsFired.current = true;
+    const profile = useStore.getState().profile;
+    // Both tier-shaped values are emitted distinctly:
+    //   experience_tier ← assignTier output stored on the profile
+    //   session_tier    ← onboarding session-length preference
+    // session_tier is emitted as explicit `null` (not omitted) when the source
+    // is missing so a persistence regression is visible in the funnel.
+    const sessionTierRaw = profile?.schedule?.sessionTier;
+    const sessionTier =
+      sessionTierRaw === "compact" || sessionTierRaw === "standard" || sessionTierRaw === "recommended"
+        ? sessionTierRaw
+        : null;
+    captureSessionStarted({
+      path: (profile?.programPath as any) || "hybrid_athlete",
+      session_type: session.phase || "unknown",
+      experience_tier: profile?.tier || "unknown",
+      session_tier: sessionTier,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Total `sets` across every exercise in the planned session. */
+  const totalPlannedSets = (
+    (warmUpExercises as any[]).concat(mainExercises as any[]).concat(cooldownExercises as any[])
+  ).reduce((acc, ex) => acc + (ex?.sets || 0), 0);
+  /** Pure count of exercises across all phases (planned). */
+  const totalPlannedExercises =
+    warmUpExercises.length + mainExercises.length + cooldownExercises.length;
+
+  const fireSessionCompleted = () => {
+    if (sessionAbandonedRef.current) return;
+    const startIso = activeSession?.startedAt;
+    const startMs = startIso ? Date.parse(startIso) : Date.now();
+    const durationSec = Math.max(0, Math.round((Date.now() - startMs) / 1000));
+    const completedSets = activeSession?.completedSets?.length ?? 0;
+    // Approximation: the planned-session shape doesn't expose a
+    // sets-completed-per-exercise count at this layer, so we report
+    // completed-set count as the "exercises_completed" proxy — duplicates an
+    // existing dev-log convention elsewhere. Tighten in a future pass if
+    // funnel analysis needs it.
+    const completionPct = totalPlannedSets > 0
+      ? Math.round((completedSets / totalPlannedSets) * 100)
+      : 0;
+    captureSessionCompleted({
+      duration_seconds: durationSec,
+      exercises_completed: completedSets,
+      total_exercises: totalPlannedSets,
+      completion_pct: completionPct,
+    });
+  };
+
+  // When the user backs out of the session before reaching `sessionComplete`,
+  // record an abandonment with the phase they were in and which exercise.
+  const handleAbandonAndBack = () => {
+    if (!sessionComplete) {
+      sessionAbandonedRef.current = true;
+      captureSessionAbandoned({
+        exercise_index: currentExIdx,
+        section: sessionPhase,
+      });
+    }
+    navigation.goBack();
+  };
+
   // Get current phase's exercises
   const currentPhaseExercises =
     sessionPhase === "warmup" ? warmUpExercises :
@@ -869,12 +951,14 @@ export default function SessionScreen({ navigation, route }: any) {
           setCurrentSetIdx(0);
           return;
         } else {
+          fireSessionCompleted();
           setSessionComplete(true);
           arnoldSay("Session done. Good work today.");
           return;
         }
       } else {
         // End of cooldown
+        fireSessionCompleted();
         setSessionComplete(true);
         arnoldSay("Session done. Good work today.");
         return;
@@ -920,6 +1004,7 @@ export default function SessionScreen({ navigation, route }: any) {
   // Advances to the next warmup or transitions to training when on the last.
   const handleSkipWarmupExercise = () => {
     if (sessionPhase !== "warmup") return;
+    captureWarmupSkipped({ mode: "single" });
     setWarmupTiming(false);
     setWarmupTime(0);
     warmupEndsAtRef.current = null;
@@ -1092,6 +1177,16 @@ export default function SessionScreen({ navigation, route }: any) {
     }
   }, [chatOpen, reviewInitiated]);
 
+  // Analytics: chat opened. Mid-session before completion, post-session after.
+  // Captured here (not at the call sites) so any open path is covered with
+  // the right context derived from current state.
+  useEffect(() => {
+    if (chatOpen) {
+      captureChatOpened({ context: sessionComplete ? "post_session" : "mid_session" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen]);
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Back / Close button */}
@@ -1102,7 +1197,7 @@ export default function SessionScreen({ navigation, route }: any) {
           flexDirection: "row",
           alignItems: "center",
         }}
-        onPress={() => navigation.goBack()}
+        onPress={handleAbandonAndBack}
       >
         <Text style={{ color: colors.textMuted, fontSize: 16, fontWeight: "600" }}>
           ← Back
@@ -1199,6 +1294,7 @@ export default function SessionScreen({ navigation, route }: any) {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
+                      captureWarmupSkipped({ mode: "all" });
                       setWarmupTiming(false);
                       setWarmupTime(0);
                       warmupEndsAtRef.current = null;
@@ -1245,6 +1341,7 @@ export default function SessionScreen({ navigation, route }: any) {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => {
+                      fireSessionCompleted();
                       setSessionComplete(true);
                       arnoldSay("Session done. Good work today.");
                     }}
@@ -1409,7 +1506,13 @@ export default function SessionScreen({ navigation, route }: any) {
       {/* Chat Widget */}
       <ChatWidget
         messages={chatMessages}
-        onSendText={(text) => sendText(text)}
+        onSendText={(text) => {
+          // Metadata only — never log the text itself.
+          captureChatMessageSent({
+            context: sessionComplete ? "post_session" : "mid_session",
+          });
+          sendText(text);
+        }}
         onTapOption={(option, msgId) => tapOption(option, msgId)}
         onClose={() => setChatOpen(false)}
         isOpen={chatOpen}

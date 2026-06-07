@@ -11,6 +11,7 @@ import { useStore } from "../store/useStore";
 import { colors } from "../theme";
 import { supabase } from "../config/supabase";
 import { hydrateFromSupabase } from "../services/supabaseSync";
+import { identify as identifyAnalytics, reset as resetAnalytics } from "../services/analytics";
 import type { Session } from "@supabase/supabase-js";
 
 // Auth
@@ -121,6 +122,15 @@ export default function AppNavigation() {
       }
       setSession(s);
       setAuthReady(true);
+      // PostHog identity. Covers cold-start (INITIAL_SESSION fires with the
+      // restored session) AND sign-out — the explicit identify in Login/SignUp
+      // is belt-and-suspenders for the moment they happen. Reset on sign-out
+      // detaches subsequent anonymous events from the prior user.
+      if (s?.user?.id) {
+        identifyAnalytics(s.user.id);
+      } else {
+        resetAnalytics();
+      }
       // Reset hydration flag on sign-out so next sign-in re-hydrates
       if (!s) {
         hydrationAttempted.current = false;

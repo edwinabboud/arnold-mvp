@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../config/supabase";
+import { identify as identifyAnalytics } from "../../services/analytics";
 
 export default function SignUpScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
@@ -33,7 +34,7 @@ export default function SignUpScreen({ navigation }: any) {
     if (password !== confirmPassword) { setError("Passwords don't match"); return; }
 
     setLoading(true);
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: { data: { display_name: "" } },
@@ -43,6 +44,12 @@ export default function SignUpScreen({ navigation }: any) {
     if (authError) {
       setError(authError.message);
     } else {
+      if (data.user?.id) {
+        // PostHog identity bound to Supabase UUID — never email. signUp may
+        // return a user before email confirmation; identify here so the
+        // pre-confirm device's anonymous events get attributed to this user.
+        identifyAnalytics(data.user.id);
+      }
       setSuccess(true);
     }
   };
