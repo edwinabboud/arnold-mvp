@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../config/supabase";
 import { isDevUser } from "../../config/devAccess";
+import { identify as identifyAnalytics } from "../../services/analytics";
 
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState(__DEV__ || isDevUser() ? "edwinabboudblanco@gmail.com" : "");
@@ -37,7 +38,7 @@ export default function LoginScreen({ navigation }: any) {
     if (!password) { setError("Password is required"); return; }
 
     setLoading(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -45,6 +46,9 @@ export default function LoginScreen({ navigation }: any) {
 
     if (authError) {
       setError(authError.message);
+    } else if (data.user?.id) {
+      // PostHog identity bound to Supabase UUID — never email.
+      identifyAnalytics(data.user.id);
     }
   };
 

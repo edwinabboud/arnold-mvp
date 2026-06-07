@@ -32,6 +32,14 @@ import { generateSkillBuilderIntermediate } from "../../engine/generators/skillB
 import { generateHybridAthleteIntermediate } from "../../engine/generators/hybridAthleteIntermediate";
 import BenchmarkInput from "./BenchmarkInput";
 import { assignTier } from "../../engine/tierAssignment";
+import {
+  captureOnboardingStarted,
+  capturePathSelected,
+  captureScheduleSet,
+  captureSessionLengthSelected,
+  captureAssessmentCompleted,
+  capturePlanGenerated,
+} from "../../services/analytics";
 import type { UserBenchmarks } from "../../types";
 import { isDevUser } from "../../config/devAccess";
 import DisclaimerModal, { hasAcknowledgedDisclaimer } from "../../components/DisclaimerModal";
@@ -263,12 +271,14 @@ export default function ConversationalOnboarding({ navigation }: any) {
     const path = PROGRAM_PATHS.find(p => p.id === pathId);
     if (!path?.available) return;
     setSelectedPath(pathId);
+    capturePathSelected({ path: pathId as any });
     goToStep(4); // Go straight to schedule, no follow-up
   };
 
-  // Step 4 - Training days handler  
+  // Step 4 - Training days handler
   const handleTrainingDaysSelect = (days: number) => {
     setTrainingDays(days);
+    captureScheduleSet({ days_per_week: days });
     // Auto-assign evenly spread days, skip day picker
     const autoSpread: Record<number, number[]> = {
       2: [1, 4],          // Mon, Thu
@@ -284,6 +294,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
   // Part 2 will materialise the cuts.
   const handleSessionTierSelect = (tier: "compact" | "standard" | "recommended") => {
     setSessionTier(tier);
+    captureSessionLengthSelected({ tier });
     goToStep(8);
   };
 
@@ -344,6 +355,10 @@ export default function ConversationalOnboarding({ navigation }: any) {
   // Complete onboarding handler
   const handleComplete = (exp: "new" | "experienced", bm: UserBenchmarks) => {
     if (!selectedPath) return;
+
+    // Fired here (not at BenchmarkInput.onComplete) so we know assessment
+    // actually carried through the disclaimer gate into plan generation.
+    captureAssessmentCompleted();
 
     const tier = assignTier(selectedPath as any, bm, exp);
 
@@ -446,6 +461,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
     }
     setActiveMesocycle(mesocycle);
 
+    capturePlanGenerated({ path: selectedPath as any, tier });
+
     console.log('[ARNOLD] Plan generated:', {
       programPath: mesocycle.programPath,
       tier: mesocycle.tier,
@@ -508,7 +525,13 @@ export default function ConversationalOnboarding({ navigation }: any) {
             <Text style={styles.splashSubtitle}>
               Adaptive training that adjusts every session based on how you perform.
             </Text>
-            <PrimaryButton label="Get started" onPress={() => goToStep(1)} />
+            <PrimaryButton
+              label="Get started"
+              onPress={() => {
+                captureOnboardingStarted();
+                goToStep(1);
+              }}
+            />
             
             {/* Dev skip button — only visible in development builds */}
             {(__DEV__ || isDevUser()) && (

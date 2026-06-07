@@ -19,6 +19,7 @@ export default {
           color: "#FF9500",
         },
       ],
+      "expo-localization",
     ],
     splash: {
       backgroundColor: "#0A0A0B"
@@ -102,6 +103,8 @@ export default {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+      posthogKey: process.env.POSTHOG_KEY,
+      posthogHost: process.env.POSTHOG_HOST,
       eas: {
         projectId: "d6afa6d1-50fa-4548-8af6-382078bad6c1",
       },
