@@ -710,8 +710,25 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   out.push(`  trainingAgeMonths: ${N(u.trainingAgeMonths, "not collected in onboarding")}`);
   out.push(`  phase: ${u.phase} | week: ${u.weekInMeso} | deload: ${u.isDeload} | test: ${u.isTestWeek}`);
   out.push(`  bodyweightKg: ${N(u.bodyweightKg, "not measured")}`);
-  const e1rmLines = Object.entries(u.e1rm).map(([k, v]) => `${k}=${v == null ? "null" : `${v}kg`}`);
-  out.push(`  e1rm: ${e1rmLines.join(", ")}`);
+  // On skill-day session types the e1rm load block is the most numerically
+  // dense thing in the packet (three kg values), and the conversation prompt
+  // rewards specificity — so it pulled the model's coaching toward load even
+  // when the actual primary purpose was an isometric hold or skill practice.
+  // Suppress the per-lift e1rm line on those session types and tell the
+  // agent explicitly where to anchor instead. The numeric profile stays on
+  // the packet object for any non-prompt consumer.
+  const SKILL_DAY_TYPES: ReadonlySet<string> = new Set([
+    "pure_skill",
+    "skill_push_pull",
+    "dedicated_skill",
+  ]);
+  const completedSessionType = packet.completedSession?.sessionType;
+  if (completedSessionType && SKILL_DAY_TYPES.has(completedSessionType)) {
+    out.push(`  e1rm: omitted on skill days — anchor on hold time, skill quality, control`);
+  } else {
+    const e1rmLines = Object.entries(u.e1rm).map(([k, v]) => `${k}=${v == null ? "null" : `${v}kg`}`);
+    out.push(`  e1rm: ${e1rmLines.join(", ")}`);
+  }
   if (u.compressionProfile) {
     out.push(`  compression: levers=[${u.compressionProfile.leversApplied.join(", ")}] — ${u.compressionProfile.rationale}`);
   } else {
