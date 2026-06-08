@@ -77,6 +77,14 @@ export interface ConversationContextPacket {
   user: {
     path: ProgramPath;
     tier: TrainerTier;
+    /**
+     * Lifecycle flags from UserProfile, disclosed so the agent never mistakes a
+     * fresh-but-valid account (saved profile, 0 sessions, null e1RM) for a
+     * failed setup. Optional only so existing non-chat packet literals (tests,
+     * review orchestrator) need no change — the chat builder always sets both.
+     */
+    onboardingComplete?: boolean;
+    assessmentComplete?: boolean;
     /** From onboarding if collected; null otherwise. */
     trainingAgeMonths: number | null;
     sessionTier: SessionTier;

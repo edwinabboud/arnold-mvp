@@ -646,6 +646,10 @@ export function buildConversationContextPacket(
     user: {
       path,
       tier,
+      // Lifecycle flags, disclosed so the agent never reads a fresh-but-valid
+      // account (saved profile, 0 sessions, null e1RM) as a failed setup.
+      onboardingComplete: profile.onboardingComplete,
+      assessmentComplete: profile.assessmentComplete,
       // No explicit trainingAgeMonths field in UserProfile; experienceLevel exists
       // but is categorical ("new" / "experienced") rather than numeric. MVP leaves
       // this null; the agent reads `tier` as a proxy per §4.
@@ -707,7 +711,17 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   out.push(``);
   out.push(`USER`);
   out.push(`  path: ${u.path} | tier: ${u.tier} | sessionTier: ${u.sessionTier}`);
-  out.push(`  trainingAgeMonths: ${N(u.trainingAgeMonths, "not collected in onboarding")}`);
+  // Explicit lifecycle disclosure. Without it the agent inferred "your account
+  // setup didn't save — contact support" from the empty history / null e1RM
+  // below, on every new user's first chat. A saved profile must say so
+  // authoritatively so empty fields read as "fresh start," not "data loss".
+  const onbState = u.onboardingComplete
+    ? "account setup SAVED — profile is valid; treat any empty/null fields below as a fresh start, NOT failed or lost setup"
+    : u.onboardingComplete === false
+      ? "onboarding INCOMPLETE — setup did not finish"
+      : "onboarding state unknown";
+  out.push(`  onboardingComplete: ${u.onboardingComplete ?? "unknown"} | assessmentComplete: ${u.assessmentComplete ?? "unknown"} — ${onbState}`);
+  out.push(`  trainingAgeMonths: ${N(u.trainingAgeMonths, "not in MVP schema — use tier as the experience proxy (not a missing-data signal)")}`);
   out.push(`  phase: ${u.phase} | week: ${u.weekInMeso} | deload: ${u.isDeload} | test: ${u.isTestWeek}`);
   out.push(`  bodyweightKg: ${N(u.bodyweightKg, "not measured")}`);
   // On skill-day session types the e1rm load block is the most numerically
@@ -733,17 +747,27 @@ export function conversationContextPacketToString(packet: ConversationContextPac
     // barbell added load (bodyweight not factored). Without these labels the
     // agent read "dip=62kg" as a plain added 1RM and contradicted the
     // added-only planned weights.
-    const E1RM_LABEL: Record<string, string> = {
-      dip: "dip(incl.bodyweight)",
-      pull_up: "pull-up(incl.bodyweight)",
-      squat: "squat(barbell-added)",
-    };
-    const e1rmLines = Object.entries(u.e1rm).map(
-      ([k, v]) => `${E1RM_LABEL[k] ?? k}=${v == null ? "null" : `${v}kg`}`,
-    );
-    out.push(
-      `  e1RM (total-load estimates incl. bodyweight for dip/pull-up; NOT added working weight): ${e1rmLines.join(", ")}`,
-    );
+    const allE1rmNull = Object.values(u.e1rm).every((v) => v == null);
+    if (allE1rmNull) {
+      // Bare "dip=null, pull-up=null, squat=null" stacked onto the "no data"
+      // pile and helped the agent conclude setup failed. Name the actual
+      // reason: a fresh account whose benchmarks carry no reps yet.
+      out.push(
+        `  e1RM: not estimable yet — benchmarks recorded without reps (expected for a new account; NOT a data error)`,
+      );
+    } else {
+      const E1RM_LABEL: Record<string, string> = {
+        dip: "dip(incl.bodyweight)",
+        pull_up: "pull-up(incl.bodyweight)",
+        squat: "squat(barbell-added)",
+      };
+      const e1rmLines = Object.entries(u.e1rm).map(
+        ([k, v]) => `${E1RM_LABEL[k] ?? k}=${v == null ? "null" : `${v}kg`}`,
+      );
+      out.push(
+        `  e1RM (total-load estimates incl. bodyweight for dip/pull-up; NOT added working weight): ${e1rmLines.join(", ")}`,
+      );
+    }
   }
   if (u.compressionProfile) {
     out.push(`  compression: levers=[${u.compressionProfile.leversApplied.join(", ")}] — ${u.compressionProfile.rationale}`);
@@ -754,7 +778,7 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   // Goals
   out.push(``);
   out.push(`GOALS`);
-  out.push(`  pathGoals: ${packet.goals.pathGoals.length === 0 ? "null (no goals source in MVP)" : packet.goals.pathGoals.join("; ")}`);
+  out.push(`  pathGoals: ${packet.goals.pathGoals.length === 0 ? "not in MVP schema (no goals source yet — not user-data loss)" : packet.goals.pathGoals.join("; ")}`);
   if (packet.goals.activePR) {
     out.push(`  activePR: ${packet.goals.activePR.lift_or_skill} target ${packet.goals.activePR.targetValue} (week ${packet.goals.activePR.scheduledWeek})`);
   } else {
@@ -780,7 +804,7 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   out.push(``);
   out.push(`RECENT HISTORY (last 5 full + 6-10 compressed, newest first)`);
   if (packet.recentHistoryFull.length === 0) {
-    out.push(`  full: [] (no prior sessions)`);
+    out.push(`  full: ${u.onboardingComplete ? "[] (no sessions yet — new account, onboarding complete; NOT a data error)" : "[] (no prior sessions)"}`);
   } else {
     packet.recentHistoryFull.forEach((s, i) => {
       const pain = s.painFlags.length === 0 ? "no pain" : `pain: ${s.painFlags.join(", ")}`;
@@ -807,9 +831,10 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   } else {
     r.openPainFlags.forEach((f) => out.push(`  openPainFlag: ${f.area} severity=${f.severity} firstSeen=${f.firstSeen}`));
   }
-  out.push(`  daysSinceLastSession: ${r.daysSinceLastSession === -1 ? "null (no prior session)" : r.daysSinceLastSession}`);
+  out.push(`  daysSinceLastSession: ${r.daysSinceLastSession === -1 ? (u.onboardingComplete ? "null (no sessions yet — new account)" : "null (no prior session)") : r.daysSinceLastSession}`);
   out.push(`  inReturnToTrain: ${r.inReturnToTrain} (MVP: always false — §9.4 logic deferred)`);
-  out.push(`  sessionsThisWeek: ${r.sessionsThisWeek}/${r.scheduledThisWeek}`);
+  const freshWeekNote = r.sessionsThisWeek === 0 && packet.recentHistoryFull.length === 0 && u.onboardingComplete ? " (new account — training not started yet)" : "";
+  out.push(`  sessionsThisWeek: ${r.sessionsThisWeek}/${r.scheduledThisWeek}${freshWeekNote}`);
 
   // Pending adaptations
   out.push(``);
