@@ -463,8 +463,14 @@ export function useChatService(): UseChatServiceReturn {
       return;
     }
 
-    // followup or navigate → treat as text input
-    await sendText(option.value || option.label);
+    // followup or navigate → treat as text input. Send the human-readable LABEL
+    // as the conversation text, never option.value — value is an opaque id (the
+    // model is prompted to emit {label, value:"option_id"}), so sending it put
+    // raw ids like "explain_plan" into the chat verbatim. value stays available
+    // for routing (the `decision` branch above keys off it); followup/navigate
+    // don't route by value, so the label is the correct user-facing message.
+    // label is required+non-empty (chip filter enforces it), so no fallback.
+    await sendText(option.label);
   }, [addMessage, addArnoldReply, sendText]);
 
   return {

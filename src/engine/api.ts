@@ -48,7 +48,13 @@ const DEFAULT_MODEL = "claude-3-haiku-20240307";
 // models overview). Replaces claude-sonnet-4-20250514 (Sonnet 4), which is
 // deprecated and retires 2026-06-15.
 const CONVERSATION_MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 500;
+// 1024 (raised from 500): conversation-agent replies are JSON ({message,
+// options}); 500 truncated longer replies mid-sentence, collapsing JSON parsing
+// to the raw-text fallback. Applies to the conversation call via
+// `config.maxTokens || MAX_TOKENS` — config.maxTokens is never set by any
+// configureAPI caller (App.tsx/evalRunner pass apiKey only), so it stays at this
+// default for the conversation agent.
+const MAX_TOKENS = 1024;
 
 interface APIConfig {
   model?: string;

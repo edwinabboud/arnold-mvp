@@ -33,7 +33,15 @@ export default function App() {
     <PostHogProvider
       apiKey={ENV.POSTHOG_KEY}
       options={{ host: ENV.POSTHOG_HOST || "https://eu.i.posthog.com" }}
-      autocapture={true}
+      // captureScreens:false — PostHogProvider mounts above NavigationContainer,
+      // so the screen autocapture tracker (useNavigationTracker) calls
+      // useNavigation/useNavigationState outside the container and throws
+      // "Couldn't find a navigation object" (a caught console.error that
+      // red-screens via LogBox in dev; silent in prod). $screen capture was
+      // already non-functional, so disabling it loses nothing while keeping
+      // touch + lifecycle autocapture. Must be explicitly false — {} or true
+      // default captureScreens on (?? true) and re-throw.
+      autocapture={{ captureScreens: false }}
     >
       <AnalyticsBootstrap />
       <SafeAreaProvider>
