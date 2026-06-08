@@ -44,7 +44,10 @@ import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptation
 const PROXY_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-proxy";
 const DELETE_ACCOUNT_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-delete-account";
 const DEFAULT_MODEL = "claude-3-haiku-20240307";
-const CONVERSATION_MODEL = "claude-sonnet-4-20250514";
+// claude-sonnet-4-6 — current Sonnet alias (verified against platform.claude.com
+// models overview). Replaces claude-sonnet-4-20250514 (Sonnet 4), which is
+// deprecated and retires 2026-06-15.
+const CONVERSATION_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 500;
 
 interface APIConfig {
@@ -159,8 +162,42 @@ async function callAgent(
     { role: "user" as const, content: userMessage },
   ];
 
+  // Diagnostic-only: surface WHY a follow-up turn fails. We capture the JWT
+  // presence, the HTTP status, and the raw response body before throwing so the
+  // FALLBACK log names the cause (401 auth vs 4xx Anthropic reject vs network).
+  let dbgStatus = -1;
+  let dbgBody = "";
+  let dbgHadToken = false;
+  let dbgReqBytes = 0;
+
   try {
+    // getAuthToken() calls supabase.auth.getSession(), which force-refreshes an
+    // expired access_token before returning it (auth-js __loadSession). So a
+    // merely-expired token self-heals here. An empty token therefore means a
+    // genuine no-session edge (refresh token revoked, or never signed in) —
+    // never fire an empty Bearer at the proxy, since that only yields an opaque
+    // 401. Surface the not-signed-in state explicitly instead.
     const authToken = await getAuthToken();
+    dbgHadToken = !!authToken;
+    if (!authToken) {
+      if (__DEV__) {
+        console.log(
+          `[Arnold] ${agent} agent — no Supabase session JWT; skipping proxy call (refresh failed or not signed in)`,
+        );
+      }
+      return JSON.stringify({
+        message:
+          "I lost the connection to your account. Sign out and back in, and I'll pick up right where we left off.",
+        tone: "neutral",
+      });
+    }
+    const reqBody = JSON.stringify({
+      model: agent === "conversation" ? CONVERSATION_MODEL : (config.model || DEFAULT_MODEL),
+      max_tokens: config.maxTokens || MAX_TOKENS,
+      system: systemPrompt,
+      messages,
+    });
+    dbgReqBytes = reqBody.length;
     const response = await fetch(PROXY_URL, {
       method: "POST",
       headers: {
@@ -168,16 +205,15 @@ async function callAgent(
         "Authorization": `Bearer ${authToken}`,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: agent === "conversation" ? CONVERSATION_MODEL : (config.model || DEFAULT_MODEL),
-        max_tokens: config.maxTokens || MAX_TOKENS,
-        system: systemPrompt,
-        messages,
-      }),
+      body: reqBody,
     });
+    dbgStatus = response.status;
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      // Read the body so the proxy/Anthropic error message survives into the log
+      // instead of being collapsed to a bare status code.
+      dbgBody = await response.text().catch(() => "<body read failed>");
+      throw new Error(`API error: ${response.status} — ${dbgBody.slice(0, 300)}`);
     }
 
     const data = await response.json();
@@ -200,10 +236,17 @@ async function callAgent(
     // Visible in any build via console.error; dev builds also get the
     // explicit "FALLBACK FIRING" tag so device logs make the cause
     // unambiguous when triaging "why is Arnold answering generically?".
-    console.error(`[Arnold] ${agent} agent error:`, error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Arnold] ${agent} agent error:`, {
+      message: errMsg,
+      httpStatus: dbgStatus, // -1 = request never returned (network/timeout)
+      body: dbgBody || "<none — threw before reading body>",
+      hadAuthToken: dbgHadToken, // false ⇒ no Supabase session JWT was sent
+      requestBytes: dbgReqBytes,
+    });
     if (__DEV__) {
       console.log(
-        `[Arnold] ${agent} agent FALLBACK FIRING — returning canned "Let me think about that. Try again in a sec."`,
+        `[Arnold] ${agent} agent FALLBACK FIRING — status=${dbgStatus} hadToken=${dbgHadToken} reqBytes=${dbgReqBytes} body=${(dbgBody || errMsg).slice(0, 200)}`,
       );
     }
     return JSON.stringify({
