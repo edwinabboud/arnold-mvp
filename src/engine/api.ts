@@ -64,12 +64,39 @@ export function configureAPI(apiConfig: { apiKey?: string; model?: string; maxTo
   config = { model: apiConfig.model ?? config.model, maxTokens: apiConfig.maxTokens ?? config.maxTokens };
 }
 
+// Lazily resolves the shared Supabase client. Kept as the single dynamic-import
+// site so the client isn't pulled into this module's eval-time graph and so
+// getAuthToken/forceRefreshToken share one import (not two).
+async function getSupabase() {
+  const mod = await import("../config/supabase");
+  return mod.supabase;
+}
+
 // Returns the current Supabase session JWT for authenticating proxy requests.
-// Uses the existing shared client which already holds the user's session.
+// getSession() force-refreshes a TIME-EXPIRED token, but NOT a token that is
+// unexpired yet signed by a rotated-out key (the post-ES256-migration case) —
+// that's what forceRefreshToken() below handles on a 401.
 async function getAuthToken(): Promise<string> {
   try {
-    const { supabase } = await import("../config/supabase");
+    const supabase = await getSupabase();
     const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// Forces Supabase to re-mint the access_token from the refresh token. Unlike
+// getSession(), this re-mints even when the current token is unexpired but
+// signed by a rotated-out signing key — confirmed to return a token signed with
+// the current ES256 key. Returns "" when the refresh token itself can't produce
+// a valid session (revoked/expired pre-migration), in which case the only
+// recovery is for the user to sign out and back in.
+async function forceRefreshToken(): Promise<string> {
+  try {
+    const supabase = await getSupabase();
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) return "";
     return data.session?.access_token ?? "";
   } catch {
     return "";
@@ -198,20 +225,70 @@ async function callAgent(
       messages,
     });
     dbgReqBytes = reqBody.length;
-    const response = await fetch(PROXY_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${authToken}`,
-        "anthropic-version": "2023-06-01",
-      },
-      body: reqBody,
+
+    const postProxy = (token: string) =>
+      fetch(PROXY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "anthropic-version": "2023-06-01",
+        },
+        body: reqBody,
+      });
+
+    // The "sign out and back in" path — refresh couldn't heal the token, so the
+    // persisted refresh token is itself unusable and only re-auth recovers.
+    const SIGN_IN_FALLBACK = JSON.stringify({
+      message:
+        "I lost the connection to your account. Sign out and back in, and I'll pick up right where we left off.",
+      tone: "neutral",
     });
+
+    let response = await postProxy(authToken);
     dbgStatus = response.status;
 
+    // ── Stale-token self-heal ────────────────────────────────────────────────
+    // A 401 here means the Supabase edge gateway rejected the token (any of its
+    // UNAUTHORIZED_* gateway codes, or the function's plain {"error":"Unauthorized"}).
+    // The proxy itself is healthy — a valid current token returns 200. The cause
+    // is a stale token the app kept sending after the project migrated to ES256
+    // signing keys: getSession() never refreshed it because it wasn't
+    // time-expired. Force a re-mint with the current key and retry the call ONCE.
+    if (response.status === 401) {
+      dbgBody = await response.text().catch(() => "");
+      if (__DEV__) {
+        console.log(
+          `[Arnold] ${agent} agent — 401 (${dbgBody.slice(0, 80)}); forcing token refresh + one retry`,
+        );
+      }
+      const refreshedToken = await forceRefreshToken();
+      if (!refreshedToken) {
+        if (__DEV__) {
+          console.log(`[Arnold] ${agent} agent — refreshSession() failed; sign-out/in required`);
+        }
+        return SIGN_IN_FALLBACK;
+      }
+      response = await postProxy(refreshedToken);
+      dbgStatus = response.status;
+      if (response.status === 401) {
+        // Refresh produced a token the gateway still rejects — unrecoverable here.
+        dbgBody = await response.text().catch(() => dbgBody);
+        if (__DEV__) {
+          console.log(
+            `[Arnold] ${agent} agent — still 401 after refresh (${dbgBody.slice(0, 80)}); sign-out/in required`,
+          );
+        }
+        return SIGN_IN_FALLBACK;
+      }
+      if (__DEV__) {
+        console.log(`[Arnold] ${agent} agent — recovered after forced refresh (status ${response.status})`);
+      }
+    }
+
     if (!response.ok) {
-      // Read the body so the proxy/Anthropic error message survives into the log
-      // instead of being collapsed to a bare status code.
+      // Non-401 error (Anthropic reject, 5xx, etc.). Read the body so the message
+      // survives into the FALLBACK log instead of a bare status code.
       dbgBody = await response.text().catch(() => "<body read failed>");
       throw new Error(`API error: ${response.status} — ${dbgBody.slice(0, 300)}`);
     }
