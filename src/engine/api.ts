@@ -33,6 +33,7 @@ import {
   SilentAdaptationResult,
 } from "./silentAdaptation";
 import { buildContextPacket, contextPacketToString } from "./contextPacket";
+import { buildChatContextStringV248 } from "./chatContext";
 import { buildE1RMProfile } from "./weightEngine";
 import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptationQueue";
 
@@ -43,7 +44,10 @@ import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptation
 const PROXY_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-proxy";
 const DELETE_ACCOUNT_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-delete-account";
 const DEFAULT_MODEL = "claude-3-haiku-20240307";
-const CONVERSATION_MODEL = "claude-sonnet-4-20250514";
+// claude-sonnet-4-6 — current Sonnet alias (verified against platform.claude.com
+// models overview). Replaces claude-sonnet-4-20250514 (Sonnet 4), which is
+// deprecated and retires 2026-06-15.
+const CONVERSATION_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 500;
 
 interface APIConfig {
@@ -60,12 +64,39 @@ export function configureAPI(apiConfig: { apiKey?: string; model?: string; maxTo
   config = { model: apiConfig.model ?? config.model, maxTokens: apiConfig.maxTokens ?? config.maxTokens };
 }
 
+// Lazily resolves the shared Supabase client. Kept as the single dynamic-import
+// site so the client isn't pulled into this module's eval-time graph and so
+// getAuthToken/forceRefreshToken share one import (not two).
+async function getSupabase() {
+  const mod = await import("../config/supabase");
+  return mod.supabase;
+}
+
 // Returns the current Supabase session JWT for authenticating proxy requests.
-// Uses the existing shared client which already holds the user's session.
+// getSession() force-refreshes a TIME-EXPIRED token, but NOT a token that is
+// unexpired yet signed by a rotated-out key (the post-ES256-migration case) —
+// that's what forceRefreshToken() below handles on a 401.
 async function getAuthToken(): Promise<string> {
   try {
-    const { supabase } = await import("../config/supabase");
+    const supabase = await getSupabase();
     const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// Forces Supabase to re-mint the access_token from the refresh token. Unlike
+// getSession(), this re-mints even when the current token is unexpired but
+// signed by a rotated-out signing key — confirmed to return a token signed with
+// the current ES256 key. Returns "" when the refresh token itself can't produce
+// a valid session (revoked/expired pre-migration), in which case the only
+// recovery is for the user to sign out and back in.
+async function forceRefreshToken(): Promise<string> {
+  try {
+    const supabase = await getSupabase();
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) return "";
     return data.session?.access_token ?? "";
   } catch {
     return "";
@@ -158,25 +189,108 @@ async function callAgent(
     { role: "user" as const, content: userMessage },
   ];
 
+  // Diagnostic-only: surface WHY a follow-up turn fails. We capture the JWT
+  // presence, the HTTP status, and the raw response body before throwing so the
+  // FALLBACK log names the cause (401 auth vs 4xx Anthropic reject vs network).
+  let dbgStatus = -1;
+  let dbgBody = "";
+  let dbgHadToken = false;
+  let dbgReqBytes = 0;
+
   try {
+    // getAuthToken() calls supabase.auth.getSession(), which force-refreshes an
+    // expired access_token before returning it (auth-js __loadSession). So a
+    // merely-expired token self-heals here. An empty token therefore means a
+    // genuine no-session edge (refresh token revoked, or never signed in) —
+    // never fire an empty Bearer at the proxy, since that only yields an opaque
+    // 401. Surface the not-signed-in state explicitly instead.
     const authToken = await getAuthToken();
-    const response = await fetch(PROXY_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${authToken}`,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: agent === "conversation" ? CONVERSATION_MODEL : (config.model || DEFAULT_MODEL),
-        max_tokens: config.maxTokens || MAX_TOKENS,
-        system: systemPrompt,
-        messages,
-      }),
+    dbgHadToken = !!authToken;
+    if (!authToken) {
+      if (__DEV__) {
+        console.log(
+          `[Arnold] ${agent} agent — no Supabase session JWT; skipping proxy call (refresh failed or not signed in)`,
+        );
+      }
+      return JSON.stringify({
+        message:
+          "I lost the connection to your account. Sign out and back in, and I'll pick up right where we left off.",
+        tone: "neutral",
+      });
+    }
+    const reqBody = JSON.stringify({
+      model: agent === "conversation" ? CONVERSATION_MODEL : (config.model || DEFAULT_MODEL),
+      max_tokens: config.maxTokens || MAX_TOKENS,
+      system: systemPrompt,
+      messages,
+    });
+    dbgReqBytes = reqBody.length;
+
+    const postProxy = (token: string) =>
+      fetch(PROXY_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "anthropic-version": "2023-06-01",
+        },
+        body: reqBody,
+      });
+
+    // The "sign out and back in" path — refresh couldn't heal the token, so the
+    // persisted refresh token is itself unusable and only re-auth recovers.
+    const SIGN_IN_FALLBACK = JSON.stringify({
+      message:
+        "I lost the connection to your account. Sign out and back in, and I'll pick up right where we left off.",
+      tone: "neutral",
     });
 
+    let response = await postProxy(authToken);
+    dbgStatus = response.status;
+
+    // ── Stale-token self-heal ────────────────────────────────────────────────
+    // A 401 here means the Supabase edge gateway rejected the token (any of its
+    // UNAUTHORIZED_* gateway codes, or the function's plain {"error":"Unauthorized"}).
+    // The proxy itself is healthy — a valid current token returns 200. The cause
+    // is a stale token the app kept sending after the project migrated to ES256
+    // signing keys: getSession() never refreshed it because it wasn't
+    // time-expired. Force a re-mint with the current key and retry the call ONCE.
+    if (response.status === 401) {
+      dbgBody = await response.text().catch(() => "");
+      if (__DEV__) {
+        console.log(
+          `[Arnold] ${agent} agent — 401 (${dbgBody.slice(0, 80)}); forcing token refresh + one retry`,
+        );
+      }
+      const refreshedToken = await forceRefreshToken();
+      if (!refreshedToken) {
+        if (__DEV__) {
+          console.log(`[Arnold] ${agent} agent — refreshSession() failed; sign-out/in required`);
+        }
+        return SIGN_IN_FALLBACK;
+      }
+      response = await postProxy(refreshedToken);
+      dbgStatus = response.status;
+      if (response.status === 401) {
+        // Refresh produced a token the gateway still rejects — unrecoverable here.
+        dbgBody = await response.text().catch(() => dbgBody);
+        if (__DEV__) {
+          console.log(
+            `[Arnold] ${agent} agent — still 401 after refresh (${dbgBody.slice(0, 80)}); sign-out/in required`,
+          );
+        }
+        return SIGN_IN_FALLBACK;
+      }
+      if (__DEV__) {
+        console.log(`[Arnold] ${agent} agent — recovered after forced refresh (status ${response.status})`);
+      }
+    }
+
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      // Non-401 error (Anthropic reject, 5xx, etc.). Read the body so the message
+      // survives into the FALLBACK log instead of a bare status code.
+      dbgBody = await response.text().catch(() => "<body read failed>");
+      throw new Error(`API error: ${response.status} — ${dbgBody.slice(0, 300)}`);
     }
 
     const data = await response.json();
@@ -187,9 +301,31 @@ async function callAgent(
       .filter(Boolean)
       .join("\n");
 
+    if (__DEV__) {
+      console.log(`[Arnold] ${agent} agent OK`, {
+        status: response.status,
+        textLen: (text || "").length,
+        preview: (text || "").slice(0, 80),
+      });
+    }
     return text || "";
   } catch (error) {
-    console.error(`[Arnold] ${agent} agent error:`, error);
+    // Visible in any build via console.error; dev builds also get the
+    // explicit "FALLBACK FIRING" tag so device logs make the cause
+    // unambiguous when triaging "why is Arnold answering generically?".
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[Arnold] ${agent} agent error:`, {
+      message: errMsg,
+      httpStatus: dbgStatus, // -1 = request never returned (network/timeout)
+      body: dbgBody || "<none — threw before reading body>",
+      hadAuthToken: dbgHadToken, // false ⇒ no Supabase session JWT was sent
+      requestBytes: dbgReqBytes,
+    });
+    if (__DEV__) {
+      console.log(
+        `[Arnold] ${agent} agent FALLBACK FIRING — status=${dbgStatus} hadToken=${dbgHadToken} reqBytes=${dbgReqBytes} body=${(dbgBody || errMsg).slice(0, 200)}`,
+      );
+    }
     return JSON.stringify({
       message: "Let me think about that. Try again in a sec.",
       tone: "neutral",
@@ -216,34 +352,63 @@ export async function routeInteraction(
 ): Promise<ChatMessage> {
   const now = new Date().toISOString();
 
-  // Build rich context from knowledge base
-  const e1rmProfile = coachingContext.todaysSession
-    ? buildE1RMProfile({
-        bodyweightKg: 70, // TODO: get from user profile when passed in
-        pullUpMaxReps: 0,
-        dipMaxReps: 0,
-      })
-    : null;
-
+  // ── v2.4.8 packet first; v1 only as fallback ─────────────────────────────
+  // The v2.4.8 ConversationContextPacket pulls real values from the store:
+  // completedSession, 5+5 history window, recovery block, real e1rm from
+  // benchmarks, structured pendingAdaptations. The v1 path here used to feed
+  // hardcoded { bodyweight: 70, week: 1, pullUpReps: 0, dipReps: 0 } — which
+  // produced an empty e1rm profile and no completed-session block, leaving
+  // the conversation agent with nothing path-specific to reference and
+  // forcing generic prose. v1 is retained ONLY for the edge case where the
+  // store has no profile yet (very early lifecycle).
   let contextStr: string;
-  try {
-    const weekNumber = 1; // TODO: derive from mesocycle state
-    const packet = buildContextPacket({
-      path: coachingContext.programPath,
-      tier: coachingContext.tier,
-      phase: coachingContext.currentPhase,
-      weekNumber,
-      session: coachingContext.todaysSession,
-      bodyweightKg: 70,
-      e1rmProfile,
-    });
-    contextStr = contextPacketToString(packet);
-  } catch {
-    // Fallback to minimal context if knowledge base fails
-    contextStr = JSON.stringify({
-      phase: coachingContext.currentPhase,
-      programPath: coachingContext.programPath,
-      tier: coachingContext.tier,
+  let contextSource: "v2.4.8" | "v1-fallback" = "v2.4.8";
+  const v248Str = (() => {
+    try {
+      return buildChatContextStringV248();
+    } catch (err) {
+      console.error("[Arnold] v2.4.8 packet build threw — falling back to v1", err);
+      return null;
+    }
+  })();
+
+  if (v248Str) {
+    contextStr = v248Str;
+  } else {
+    contextSource = "v1-fallback";
+    // Original v1 behaviour — kept verbatim for the no-profile edge case.
+    const e1rmProfile = coachingContext.todaysSession
+      ? buildE1RMProfile({
+          bodyweightKg: 70, // TODO: get from user profile when passed in
+          pullUpMaxReps: 0,
+          dipMaxReps: 0,
+        })
+      : null;
+    try {
+      const weekNumber = 1; // TODO: derive from mesocycle state
+      const packet = buildContextPacket({
+        path: coachingContext.programPath,
+        tier: coachingContext.tier,
+        phase: coachingContext.currentPhase,
+        weekNumber,
+        session: coachingContext.todaysSession,
+        bodyweightKg: 70,
+        e1rmProfile,
+      });
+      contextStr = contextPacketToString(packet);
+    } catch {
+      contextStr = JSON.stringify({
+        phase: coachingContext.currentPhase,
+        programPath: coachingContext.programPath,
+        tier: coachingContext.tier,
+      });
+    }
+  }
+
+  if (__DEV__) {
+    console.log(`[Arnold] routeInteraction context: ${contextSource}`, {
+      action: action.type,
+      contextLen: contextStr.length,
     });
   }
 
@@ -252,10 +417,15 @@ export async function routeInteraction(
     contextStr += `\n\nRules decision: ${JSON.stringify(rulesDecision)}`;
   }
 
-  // Append pending adaptations
-  const pendingAdaptations = adaptationQueue ? getUnsurfacedItems(adaptationQueue) : [];
-  if (pendingAdaptations.length > 0) {
-    contextStr += `\n\nPending adaptations (surface these to the user): ${formatForChat(pendingAdaptations)}`;
+  // Append pending adaptations as a plain string ONLY on the v1 fallback. The
+  // v2.4.8 packet already includes a structured `PENDING ADAPTATIONS` block
+  // serialized by conversationContextPacketToString — re-appending here
+  // would just duplicate the same data.
+  if (contextSource === "v1-fallback") {
+    const pendingAdaptations = adaptationQueue ? getUnsurfacedItems(adaptationQueue) : [];
+    if (pendingAdaptations.length > 0) {
+      contextStr += `\n\nPending adaptations (surface these to the user): ${formatForChat(pendingAdaptations)}`;
+    }
   }
 
   contextStr += `\n\nStreaks: ${coachingContext.streaks.currentDaily} day streak, ${coachingContext.streaks.totalSessions} total sessions.`;

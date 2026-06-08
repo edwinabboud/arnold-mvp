@@ -278,15 +278,23 @@ const isValidNumber = (s: string): boolean => {
 export default function BenchmarkInput({ programPath, onComplete, onBack }: BenchmarkInputProps) {
   const [step, setStep] = useState<"filter" | number>(__DEV__ || isDevUser() ? 0 : "filter");
 
-  // All numeric state is string — parsed only on final submit
+  // All numeric state is string — parsed only on final submit.
+  //
+  // Dev defaults are deliberately a realistic *new-user* profile (5 BW pull-ups,
+  // 8 BW dips, 20 BW squats — no added weight). The previous defaults
+  // (32.5kg × 2 pull-ups, 66kg × 1 dip) were elite streetlifter values that
+  // exercised the high-end progression branches but inflated the user's
+  // totalE1RM in the v2.4.8 packet (e.g. 115kg dip e1RM at 70kg BW), which
+  // made every dev chat-test misleading: Arnold correctly judged the inputs
+  // as a probable data error and refused to coach on them.
   const [repsValues, setRepsValues] = useState<Record<string, string>>(
     (__DEV__ || isDevUser())
-      ? { pullups: "2", dips: "1", squat: "50" }
+      ? { pullups: "5", dips: "8", squat: "20" }
       : {}
   );
   const [weightValues, setWeightValues] = useState<Record<string, string>>(
     (__DEV__ || isDevUser())
-      ? { pullups: "32.5", dips: "66", squat: "0" }
+      ? { pullups: "0", dips: "0", squat: "0" }
       : {}
   );
   const [numberValues, setNumberValues] = useState<Record<string, string>>({});
