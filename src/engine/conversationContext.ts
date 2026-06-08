@@ -726,8 +726,24 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   if (completedSessionType && SKILL_DAY_TYPES.has(completedSessionType)) {
     out.push(`  e1rm: omitted on skill days — anchor on hold time, skill quality, control`);
   } else {
-    const e1rmLines = Object.entries(u.e1rm).map(([k, v]) => `${k}=${v == null ? "null" : `${v}kg`}`);
-    out.push(`  e1rm: ${e1rmLines.join(", ")}`);
+    // Disclosure only (math unchanged): these e1RM values are TOTAL-LOAD
+    // estimates. For dip/pull-up they already INCLUDE the bodyweight
+    // contribution (×0.70 / ×0.65 body-load coefficients), so they are NOT
+    // comparable to a session's added "+Xkg" working weight. Squat e1RM is
+    // barbell added load (bodyweight not factored). Without these labels the
+    // agent read "dip=62kg" as a plain added 1RM and contradicted the
+    // added-only planned weights.
+    const E1RM_LABEL: Record<string, string> = {
+      dip: "dip(incl.bodyweight)",
+      pull_up: "pull-up(incl.bodyweight)",
+      squat: "squat(barbell-added)",
+    };
+    const e1rmLines = Object.entries(u.e1rm).map(
+      ([k, v]) => `${E1RM_LABEL[k] ?? k}=${v == null ? "null" : `${v}kg`}`,
+    );
+    out.push(
+      `  e1RM (total-load estimates incl. bodyweight for dip/pull-up; NOT added working weight): ${e1rmLines.join(", ")}`,
+    );
   }
   if (u.compressionProfile) {
     out.push(`  compression: levers=[${u.compressionProfile.leversApplied.join(", ")}] — ${u.compressionProfile.rationale}`);
