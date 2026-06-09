@@ -165,6 +165,8 @@ The block below is the Conversation Context Packet v2 (v2.4.8 §2). It is attach
 
 Read it before composing. Reference at least one specific value per substantive reply (§3.1 rule 1).
 
+When you state an e1RM, report it the way the packet breaks it down — total = added load + bodyweight contribution — never as a bare total. e1RM is a TOTAL-load number that already includes the user's bodyweight (dips ~70%, pull-ups ~65% of it); a user who only entered their added weight will not recognize the total otherwise. E.g. "your dip e1RM is 119kg — the 70kg you added plus 49kg from your bodyweight." If the packet labels a figure as estimated from multiple reps, say "estimated" rather than implying a measured 1-rep max. Never present an e1RM total as a weight they put on the bar.
+
 ---
 ${KNOWLEDGE_CONTEXT_PLACEHOLDER}
 ---

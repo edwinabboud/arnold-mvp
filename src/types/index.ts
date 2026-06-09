@@ -77,6 +77,14 @@ export interface ConversationContextPacket {
   user: {
     path: ProgramPath;
     tier: TrainerTier;
+    /**
+     * Lifecycle flags from UserProfile, disclosed so the agent never mistakes a
+     * fresh-but-valid account (saved profile, 0 sessions, null e1RM) for a
+     * failed setup. Optional only so existing non-chat packet literals (tests,
+     * review orchestrator) need no change — the chat builder always sets both.
+     */
+    onboardingComplete?: boolean;
+    assessmentComplete?: boolean;
     /** From onboarding if collected; null otherwise. */
     trainingAgeMonths: number | null;
     sessionTier: SessionTier;
@@ -88,6 +96,23 @@ export interface ConversationContextPacket {
     bodyweightKg: number | null;
     /** Flattened e1RMs keyed by lift slug — value null when not yet measured. */
     e1rm: Record<string, number | null>;
+    /**
+     * Per-lift e1RM breakdown so Arnold can report a self-explanatory number
+     * (added load + bodyweight contribution) instead of a bare total. All values
+     * are already-computed engine outputs (`totalE1RM`, `bwContribution`) or raw
+     * benchmark inputs (`addedKg`, `reps`) — NO recomputation here. When
+     * `reps === 1` the `addedKg + bwContributionKg = totalE1RM` split is exact;
+     * when `reps > 1` `totalE1RM` is an Epley estimate that does NOT split
+     * cleanly (serializer labels it as estimated rather than faking a sum).
+     * Optional so non-chat packet literals/tests need no change; the chat
+     * builder always sets it.
+     */
+    e1rmBreakdown?: Record<string, {
+      totalE1RM: number;
+      bwContributionKg: number;
+      addedKg: number;
+      reps: number;
+    } | null>;
     /**
      * v2.4.9 §5 — explains the lever combination behind a compressed session
      * so Arnold can speak to "why is this short?" in coaching language.

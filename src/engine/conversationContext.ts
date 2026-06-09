@@ -646,6 +646,10 @@ export function buildConversationContextPacket(
     user: {
       path,
       tier,
+      // Lifecycle flags, disclosed so the agent never reads a fresh-but-valid
+      // account (saved profile, 0 sessions, null e1RM) as a failed setup.
+      onboardingComplete: profile.onboardingComplete,
+      assessmentComplete: profile.assessmentComplete,
       // No explicit trainingAgeMonths field in UserProfile; experienceLevel exists
       // but is categorical ("new" / "experienced") rather than numeric. MVP leaves
       // this null; the agent reads `tier` as a proxy per §4.
@@ -657,6 +661,21 @@ export function buildConversationContextPacket(
       isTestWeek,
       bodyweightKg: profile.bodyweightKg ?? null,
       e1rm: flattenE1RM(e1rmProfile),
+      // Components for self-explanatory e1RM reporting. Reuses already-computed
+      // totalE1RM + bwContribution (no recomputation) and the raw benchmark
+      // inputs (added load + reps). reps is what lets the serializer show the
+      // exact added+bodyweight split only for true 1-rep maxes.
+      e1rmBreakdown: {
+        dip: e1rmProfile?.dip
+          ? { totalE1RM: e1rmProfile.dip.totalE1RM, bwContributionKg: e1rmProfile.dip.bwContribution, addedKg: profile.benchmarks?.dipAddedKg ?? 0, reps: profile.benchmarks?.dipMaxReps ?? 0 }
+          : null,
+        pull_up: e1rmProfile?.pullUp
+          ? { totalE1RM: e1rmProfile.pullUp.totalE1RM, bwContributionKg: e1rmProfile.pullUp.bwContribution, addedKg: profile.benchmarks?.pullUpAddedKg ?? 0, reps: profile.benchmarks?.pullUpMaxReps ?? 0 }
+          : null,
+        squat: e1rmProfile?.squat
+          ? { totalE1RM: e1rmProfile.squat.totalE1RM, bwContributionKg: e1rmProfile.squat.bwContribution, addedKg: profile.benchmarks?.squatAddedKg ?? 0, reps: profile.benchmarks?.squatMaxReps ?? 0 }
+          : null,
+      },
       // v2.4.9 Part 1: compression is disabled (all tiers → full sessions).
       // Part 2 populates this from the per-path × session-type compression
       // profile so Arnold can name the lever combination ("we're holding
@@ -707,7 +726,17 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   out.push(``);
   out.push(`USER`);
   out.push(`  path: ${u.path} | tier: ${u.tier} | sessionTier: ${u.sessionTier}`);
-  out.push(`  trainingAgeMonths: ${N(u.trainingAgeMonths, "not collected in onboarding")}`);
+  // Explicit lifecycle disclosure. Without it the agent inferred "your account
+  // setup didn't save — contact support" from the empty history / null e1RM
+  // below, on every new user's first chat. A saved profile must say so
+  // authoritatively so empty fields read as "fresh start," not "data loss".
+  const onbState = u.onboardingComplete
+    ? "account setup SAVED — profile is valid; treat any empty/null fields below as a fresh start, NOT failed or lost setup"
+    : u.onboardingComplete === false
+      ? "onboarding INCOMPLETE — setup did not finish"
+      : "onboarding state unknown";
+  out.push(`  onboardingComplete: ${u.onboardingComplete ?? "unknown"} | assessmentComplete: ${u.assessmentComplete ?? "unknown"} — ${onbState}`);
+  out.push(`  trainingAgeMonths: ${N(u.trainingAgeMonths, "not in MVP schema — use tier as the experience proxy (not a missing-data signal)")}`);
   out.push(`  phase: ${u.phase} | week: ${u.weekInMeso} | deload: ${u.isDeload} | test: ${u.isTestWeek}`);
   out.push(`  bodyweightKg: ${N(u.bodyweightKg, "not measured")}`);
   // On skill-day session types the e1rm load block is the most numerically
@@ -733,17 +762,50 @@ export function conversationContextPacketToString(packet: ConversationContextPac
     // barbell added load (bodyweight not factored). Without these labels the
     // agent read "dip=62kg" as a plain added 1RM and contradicted the
     // added-only planned weights.
-    const E1RM_LABEL: Record<string, string> = {
-      dip: "dip(incl.bodyweight)",
-      pull_up: "pull-up(incl.bodyweight)",
-      squat: "squat(barbell-added)",
-    };
-    const e1rmLines = Object.entries(u.e1rm).map(
-      ([k, v]) => `${E1RM_LABEL[k] ?? k}=${v == null ? "null" : `${v}kg`}`,
-    );
-    out.push(
-      `  e1RM (total-load estimates incl. bodyweight for dip/pull-up; NOT added working weight): ${e1rmLines.join(", ")}`,
-    );
+    const allE1rmNull = Object.values(u.e1rm).every((v) => v == null);
+    if (allE1rmNull) {
+      // Bare "dip=null, pull-up=null, squat=null" stacked onto the "no data"
+      // pile and helped the agent conclude setup failed. Name the actual
+      // reason: a fresh account whose benchmarks carry no reps yet.
+      out.push(
+        `  e1RM: not estimable yet — benchmarks recorded without reps (expected for a new account; NOT a data error)`,
+      );
+    } else if (u.e1rmBreakdown) {
+      // Self-explanatory breakdown so the total is never a surprise: show the
+      // components (added load + bodyweight contribution). The added+bodyweight
+      // sum is exact ONLY for a true 1-rep max; multi-rep totals are Epley
+      // estimates and are labeled as such rather than faking an A+B sum.
+      const LIFT_NAME: Record<string, string> = { dip: "dip", pull_up: "pull-up", squat: "squat" };
+      out.push(`  e1RM (estimated 1-rep max = total load; NOT a bare added-weight number — report the breakdown to the user):`);
+      for (const [k, b] of Object.entries(u.e1rmBreakdown)) {
+        const name = LIFT_NAME[k] ?? k;
+        if (!b) {
+          out.push(`    ${name}: null (not measured)`);
+        } else if (b.bwContributionKg <= 0) {
+          // squat / legs — bodyweight is not factored into the load
+          out.push(`    ${name}: ${b.totalE1RM}kg (added barbell load only; bodyweight not counted for this lift)`);
+        } else if (b.reps === 1) {
+          const bw = u.bodyweightKg;
+          const pct = bw && bw > 0 ? ` (${Math.round((b.bwContributionKg / bw) * 100)}% of your ${bw}kg)` : "";
+          out.push(`    ${name}: ${b.totalE1RM}kg total = ${b.addedKg}kg added + ${b.bwContributionKg}kg from bodyweight${pct}`);
+        } else {
+          out.push(`    ${name}: ${b.totalE1RM}kg total — estimated from ${b.reps} reps at +${b.addedKg}kg added (Epley estimate; does NOT split cleanly into added+bodyweight)`);
+        }
+      }
+    } else {
+      // Fallback for non-chat packet consumers that don't populate e1rmBreakdown.
+      const E1RM_LABEL: Record<string, string> = {
+        dip: "dip(incl.bodyweight)",
+        pull_up: "pull-up(incl.bodyweight)",
+        squat: "squat(barbell-added)",
+      };
+      const e1rmLines = Object.entries(u.e1rm).map(
+        ([k, v]) => `${E1RM_LABEL[k] ?? k}=${v == null ? "null" : `${v}kg`}`,
+      );
+      out.push(
+        `  e1RM (total-load estimates incl. bodyweight for dip/pull-up; NOT added working weight): ${e1rmLines.join(", ")}`,
+      );
+    }
   }
   if (u.compressionProfile) {
     out.push(`  compression: levers=[${u.compressionProfile.leversApplied.join(", ")}] — ${u.compressionProfile.rationale}`);
@@ -754,7 +816,7 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   // Goals
   out.push(``);
   out.push(`GOALS`);
-  out.push(`  pathGoals: ${packet.goals.pathGoals.length === 0 ? "null (no goals source in MVP)" : packet.goals.pathGoals.join("; ")}`);
+  out.push(`  pathGoals: ${packet.goals.pathGoals.length === 0 ? "not in MVP schema (no goals source yet — not user-data loss)" : packet.goals.pathGoals.join("; ")}`);
   if (packet.goals.activePR) {
     out.push(`  activePR: ${packet.goals.activePR.lift_or_skill} target ${packet.goals.activePR.targetValue} (week ${packet.goals.activePR.scheduledWeek})`);
   } else {
@@ -780,7 +842,7 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   out.push(``);
   out.push(`RECENT HISTORY (last 5 full + 6-10 compressed, newest first)`);
   if (packet.recentHistoryFull.length === 0) {
-    out.push(`  full: [] (no prior sessions)`);
+    out.push(`  full: ${u.onboardingComplete ? "[] (no sessions yet — new account, onboarding complete; NOT a data error)" : "[] (no prior sessions)"}`);
   } else {
     packet.recentHistoryFull.forEach((s, i) => {
       const pain = s.painFlags.length === 0 ? "no pain" : `pain: ${s.painFlags.join(", ")}`;
@@ -807,9 +869,10 @@ export function conversationContextPacketToString(packet: ConversationContextPac
   } else {
     r.openPainFlags.forEach((f) => out.push(`  openPainFlag: ${f.area} severity=${f.severity} firstSeen=${f.firstSeen}`));
   }
-  out.push(`  daysSinceLastSession: ${r.daysSinceLastSession === -1 ? "null (no prior session)" : r.daysSinceLastSession}`);
+  out.push(`  daysSinceLastSession: ${r.daysSinceLastSession === -1 ? (u.onboardingComplete ? "null (no sessions yet — new account)" : "null (no prior session)") : r.daysSinceLastSession}`);
   out.push(`  inReturnToTrain: ${r.inReturnToTrain} (MVP: always false — §9.4 logic deferred)`);
-  out.push(`  sessionsThisWeek: ${r.sessionsThisWeek}/${r.scheduledThisWeek}`);
+  const freshWeekNote = r.sessionsThisWeek === 0 && packet.recentHistoryFull.length === 0 && u.onboardingComplete ? " (new account — training not started yet)" : "";
+  out.push(`  sessionsThisWeek: ${r.sessionsThisWeek}/${r.scheduledThisWeek}${freshWeekNote}`);
 
   // Pending adaptations
   out.push(``);
