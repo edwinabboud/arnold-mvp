@@ -661,6 +661,21 @@ export function buildConversationContextPacket(
       isTestWeek,
       bodyweightKg: profile.bodyweightKg ?? null,
       e1rm: flattenE1RM(e1rmProfile),
+      // Components for self-explanatory e1RM reporting. Reuses already-computed
+      // totalE1RM + bwContribution (no recomputation) and the raw benchmark
+      // inputs (added load + reps). reps is what lets the serializer show the
+      // exact added+bodyweight split only for true 1-rep maxes.
+      e1rmBreakdown: {
+        dip: e1rmProfile?.dip
+          ? { totalE1RM: e1rmProfile.dip.totalE1RM, bwContributionKg: e1rmProfile.dip.bwContribution, addedKg: profile.benchmarks?.dipAddedKg ?? 0, reps: profile.benchmarks?.dipMaxReps ?? 0 }
+          : null,
+        pull_up: e1rmProfile?.pullUp
+          ? { totalE1RM: e1rmProfile.pullUp.totalE1RM, bwContributionKg: e1rmProfile.pullUp.bwContribution, addedKg: profile.benchmarks?.pullUpAddedKg ?? 0, reps: profile.benchmarks?.pullUpMaxReps ?? 0 }
+          : null,
+        squat: e1rmProfile?.squat
+          ? { totalE1RM: e1rmProfile.squat.totalE1RM, bwContributionKg: e1rmProfile.squat.bwContribution, addedKg: profile.benchmarks?.squatAddedKg ?? 0, reps: profile.benchmarks?.squatMaxReps ?? 0 }
+          : null,
+      },
       // v2.4.9 Part 1: compression is disabled (all tiers → full sessions).
       // Part 2 populates this from the per-path × session-type compression
       // profile so Arnold can name the lever combination ("we're holding
@@ -755,7 +770,30 @@ export function conversationContextPacketToString(packet: ConversationContextPac
       out.push(
         `  e1RM: not estimable yet — benchmarks recorded without reps (expected for a new account; NOT a data error)`,
       );
+    } else if (u.e1rmBreakdown) {
+      // Self-explanatory breakdown so the total is never a surprise: show the
+      // components (added load + bodyweight contribution). The added+bodyweight
+      // sum is exact ONLY for a true 1-rep max; multi-rep totals are Epley
+      // estimates and are labeled as such rather than faking an A+B sum.
+      const LIFT_NAME: Record<string, string> = { dip: "dip", pull_up: "pull-up", squat: "squat" };
+      out.push(`  e1RM (estimated 1-rep max = total load; NOT a bare added-weight number — report the breakdown to the user):`);
+      for (const [k, b] of Object.entries(u.e1rmBreakdown)) {
+        const name = LIFT_NAME[k] ?? k;
+        if (!b) {
+          out.push(`    ${name}: null (not measured)`);
+        } else if (b.bwContributionKg <= 0) {
+          // squat / legs — bodyweight is not factored into the load
+          out.push(`    ${name}: ${b.totalE1RM}kg (added barbell load only; bodyweight not counted for this lift)`);
+        } else if (b.reps === 1) {
+          const bw = u.bodyweightKg;
+          const pct = bw && bw > 0 ? ` (${Math.round((b.bwContributionKg / bw) * 100)}% of your ${bw}kg)` : "";
+          out.push(`    ${name}: ${b.totalE1RM}kg total = ${b.addedKg}kg added + ${b.bwContributionKg}kg from bodyweight${pct}`);
+        } else {
+          out.push(`    ${name}: ${b.totalE1RM}kg total — estimated from ${b.reps} reps at +${b.addedKg}kg added (Epley estimate; does NOT split cleanly into added+bodyweight)`);
+        }
+      }
     } else {
+      // Fallback for non-chat packet consumers that don't populate e1rmBreakdown.
       const E1RM_LABEL: Record<string, string> = {
         dip: "dip(incl.bodyweight)",
         pull_up: "pull-up(incl.bodyweight)",
