@@ -23,7 +23,6 @@ import { colors, typography, spacing, radius } from "../../theme";
 import ArnoldWaveform from "../../components/waveform/ArnoldWaveform";
 import { useStore } from "../../store/useStore";
 import { createBeginnerProgressions } from "../../engine/beginnerProgressions";
-import { generateMesocycle } from "../../engine/planGenerator";
 import { generateStreetLifterBeginner } from "../../engine/generators/streetLifterBeginner";
 import { generateSkillBuilderBeginner } from "../../engine/generators/skillBuilderBeginner";
 import { generateHybridAthleteBeginner } from "../../engine/generators/hybridAthleteBeginner";
@@ -455,9 +454,10 @@ export default function ConversationalOnboarding({ navigation }: any) {
         ? generateHybridAthleteBeginner(userId, planSchedule, userProgs)
         : generateHybridAthleteIntermediate(userId, planSchedule, userProgs, bm);
     } else {
-      // Fallback to old generator for paths not yet implemented
-      const planGoals = rankedGoals.map((goalId, idx) => ({ goal: goalId as any, rank: idx + 1 }));
-      mesocycle = generateMesocycle(userId, planGoals, planSchedule, userProgs);
+      // v2.4.12 §5: all three program paths have dedicated generators and path
+      // selection only offers these three, so this branch is unreachable. Throw
+      // explicitly rather than silently building a plan from a removed fallback.
+      throw new Error("[ARNOLD] Unknown program path: " + selectedPath);
     }
     setActiveMesocycle(mesocycle);
 
