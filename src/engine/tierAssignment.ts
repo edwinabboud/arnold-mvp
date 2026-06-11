@@ -108,14 +108,13 @@ export function assignTier(
     // than the wall hold it must clear (v2.4.12 §2 handstand semantics).
 
     // Advanced (Bible v1.1 §2): "≥10 PU with +30% BW AND ≥5s freestanding HS".
-    // Benchmark semantics are "max reps AT the entered added weight", so we cannot
-    // faithfully verify "10 reps at +30%BW" — pullUpMaxReps is reps at
-    // pullUpAddedKg, not specifically at 30%BW. Closest faithful check: the +30%BW
-    // added load is the strength signal, plus a genuine freestanding
-    // (wallOnly===false) hold of ≥5s. The literal 10-rep gate is intentionally
-    // dropped as unverifiable against the available benchmark fields.
-    if (pullAdded >= bw * 0.3 && wallOnly === false && handstand >= 5) {
-      return log("advanced", "HY advanced: pullAdded>=30%BW AND freestanding HS>=5s", inputs);
+    // The bible "10 PU with +30% BW" means 10 reps AT +30% BW added, and the
+    // benchmark semantics are exactly "max reps at the entered added weight"
+    // (pullUpMaxReps reps performed with pullUpAddedKg added) — so BOTH gates
+    // apply: the added load must be ≥30% BW AND the rep count at that load must be
+    // ≥10. Plus a genuine freestanding (wallOnly===false) hold of ≥5s.
+    if (pullAdded >= bw * 0.3 && pullReps >= 10 && wallOnly === false && handstand >= 5) {
+      return log("advanced", "HY advanced: pullAdded>=30%BW AND PU>=10 AND freestanding HS>=5s", inputs);
     }
 
     // Intermediate (Bible v1.1 §2): ≥8 PU AND ≥12 dips AND ≥45s wall HS.
