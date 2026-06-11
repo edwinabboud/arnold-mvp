@@ -35,12 +35,13 @@
 //         levelMapper "5+ clean reps") | reps≥1 → push_04 (Diamond, below the dip
 //         band — conservative) | else → push_01
 //   legs  (squatMaxReps / squatAddedKg) — levelMapper's legs bands are pistol-
-//         VARIATION based while the benchmark is rep/load based (no 1:1). Per the
-//         brief's explicit "weighted → top legs target": added>0 → legs_06.
-//         FLAG: a weighted barbell-squatter is not necessarily a pistol-squatter,
-//         so legs_06 (Full Pistols) may over-place; surfaced in the report for
-//         review. Non-weighted: reps≥20 → legs_03 (Bulgarian split, conservative
-//         "solid volume" bump) | else → legs_01.
+//         VARIATION based while the benchmark is rep/load based (no 1:1). Weighted
+//         barbell strength ≠ pistol skill, so added>0 → legs_05 (Assisted Pistol
+//         Squats) — ONE BELOW the top legs target legs_06 (Full Pistols) —
+//         deliberately under-placing rather than seeding a skill they may not
+//         have. Conservative per v2.4.12 Change 1; legs mapping to be recalibrated
+//         with coach data (v2.4.10). Non-weighted: reps≥20 → legs_03 (Bulgarian
+//         split, conservative "solid volume" bump) | else → legs_01.
 //   core  (lSitHoldSec) — sec≥10 → core_04 (Hanging Leg Raises; conservative —
 //         a 10s L-sit could justify core_05/L-sit but we under-load one band) |
 //         sec≥1 → core_02 (Hollow Hold) | else → core_01.
@@ -111,7 +112,12 @@ const RESOLVERS: PatternResolver[] = [
       if (b.squatMaxReps === undefined && b.squatAddedKg === undefined) return null;
       const reps = b.squatMaxReps ?? 0;
       const added = b.squatAddedKg ?? 0;
-      if (added > 0) return "legs_06";
+      // Weighted → ONE BELOW the top legs target (legs_05 Assisted Pistol Squats,
+      // immediately precedes legs_06 Full Pistols in the tree). Weighted barbell
+      // strength ≠ pistol skill, so we deliberately under-place rather than seed
+      // Full Pistols. Conservative per v2.4.12 Change 1; legs mapping to be
+      // recalibrated with coach data (v2.4.10).
+      if (added > 0) return "legs_05";
       if (reps >= 20) return "legs_03";
       return "legs_01";
     },
