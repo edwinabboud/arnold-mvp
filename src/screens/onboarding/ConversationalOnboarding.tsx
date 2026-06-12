@@ -23,6 +23,7 @@ import { colors, typography, spacing, radius } from "../../theme";
 import ArnoldWaveform from "../../components/waveform/ArnoldWaveform";
 import { useStore } from "../../store/useStore";
 import { createBeginnerProgressions } from "../../engine/beginnerProgressions";
+import { initializeProgressionsFromBenchmarks } from "../../engine/benchmarkProgressions";
 import { generateStreetLifterBeginner } from "../../engine/generators/streetLifterBeginner";
 import { generateSkillBuilderBeginner } from "../../engine/generators/skillBuilderBeginner";
 import { generateHybridAthleteBeginner } from "../../engine/generators/hybridAthleteBeginner";
@@ -426,7 +427,12 @@ export default function ConversationalOnboarding({ navigation }: any) {
     completeOnboarding();
 
     // === PLAN GENERATION ===
-    const userProgs = createBeginnerProgressions();
+    // v2.4.12 Change 1: beginners keep order-0 defaults; intermediate/advanced
+    // seed each pattern's active level from their assessed benchmarks.
+    const userProgs =
+      tier === "beginner"
+        ? createBeginnerProgressions()
+        : initializeProgressionsFromBenchmarks(selectedPath as any, bm, tier);
     setUserProgressions(userProgs);
 
     const planSchedule = {
