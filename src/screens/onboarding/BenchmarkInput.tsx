@@ -26,6 +26,11 @@ interface BenchmarkInputProps {
     benchmarks: UserBenchmarks;
   }) => void;
   onBack?: () => void;
+  // v2.4.12 Change 3: when redoing numbers from the tier-confirmation step, the
+  // previously-collected benchmarks pre-fill the inputs. Optional — other call
+  // sites are unaffected. When present, the experience filter is skipped (the
+  // user is known-experienced) and the value maps seed from these.
+  initialBenchmarks?: UserBenchmarks;
 }
 
 // ── NumberField Sub-Component ───────────────────────────────────────────────
@@ -302,8 +307,14 @@ const isValidNumber = (s: string): boolean => {
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export default function BenchmarkInput({ programPath, onComplete, onBack }: BenchmarkInputProps) {
-  const [step, setStep] = useState<"filter" | number>((__DEV__ || isDevUser()) && DEV_PREFILL ? 0 : "filter");
+export default function BenchmarkInput({ programPath, onComplete, onBack, initialBenchmarks }: BenchmarkInputProps) {
+  // Redo path (initialBenchmarks present) → skip the experience filter (the user
+  // is known-experienced) and seed maps from the prior values. Otherwise keep the
+  // dev-prefill behavior.
+  const str = (v: number | undefined): string => (v === undefined ? "" : String(v));
+  const [step, setStep] = useState<"filter" | number>(
+    initialBenchmarks ? 0 : ((__DEV__ || isDevUser()) && DEV_PREFILL ? 0 : "filter")
+  );
 
   // All numeric state is string — parsed only on final submit.
   //
@@ -315,18 +326,37 @@ export default function BenchmarkInput({ programPath, onComplete, onBack }: Benc
   // made every dev chat-test misleading: Arnold correctly judged the inputs
   // as a probable data error and refused to coach on them.
   const [repsValues, setRepsValues] = useState<Record<string, string>>(
-    (__DEV__ || isDevUser()) && DEV_PREFILL
-      ? { pullups: "5", dips: "8", squat: "20" }
-      : {}
+    initialBenchmarks
+      ? { pullups: str(initialBenchmarks.pullUpMaxReps), dips: str(initialBenchmarks.dipMaxReps), squat: str(initialBenchmarks.squatMaxReps) }
+      : (__DEV__ || isDevUser()) && DEV_PREFILL
+        ? { pullups: "5", dips: "8", squat: "20" }
+        : {}
   );
   const [weightValues, setWeightValues] = useState<Record<string, string>>(
-    (__DEV__ || isDevUser()) && DEV_PREFILL
-      ? { pullups: "0", dips: "0", squat: "0" }
+    initialBenchmarks
+      ? { pullups: str(initialBenchmarks.pullUpAddedKg), dips: str(initialBenchmarks.dipAddedKg), squat: str(initialBenchmarks.squatAddedKg) }
+      : (__DEV__ || isDevUser()) && DEV_PREFILL
+        ? { pullups: "0", dips: "0", squat: "0" }
+        : {}
+  );
+  const [numberValues, setNumberValues] = useState<Record<string, string>>(
+    initialBenchmarks
+      ? {
+          handstand: str(initialBenchmarks.handstandHoldSec),
+          lsit: str(initialBenchmarks.lSitHoldSec),
+          frontLeverHold: str(initialBenchmarks.frontLeverHoldSec),
+          plancheHold: str(initialBenchmarks.plancheHoldSec),
+        }
       : {}
   );
-  const [numberValues, setNumberValues] = useState<Record<string, string>>({});
-  const [toggleValues, setToggleValues] = useState<Record<string, boolean>>({});
-  const [levelValues, setLevelValues] = useState<Record<string, string>>({});
+  const [toggleValues, setToggleValues] = useState<Record<string, boolean>>(
+    initialBenchmarks ? { handstand: !!initialBenchmarks.handstandWallOnly } : {}
+  );
+  const [levelValues, setLevelValues] = useState<Record<string, string>>(
+    initialBenchmarks
+      ? { frontLever: initialBenchmarks.frontLeverLevel ?? "", planche: initialBenchmarks.plancheLevel ?? "" }
+      : {}
+  );
 
   const questions = QUESTIONS_BY_PATH[programPath] || HYBRID_QUESTIONS;
   const currentQuestion = typeof step === "number" ? questions[step] : null;

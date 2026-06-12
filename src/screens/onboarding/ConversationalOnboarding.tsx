@@ -40,7 +40,7 @@ import {
   captureAssessmentCompleted,
   capturePlanGenerated,
 } from "../../services/analytics";
-import type { UserBenchmarks } from "../../types";
+import type { UserBenchmarks, TrainerTier } from "../../types";
 import { isDevUser, DEV_PREFILL } from "../../config/devAccess";
 import DisclaimerModal, { hasAcknowledgedDisclaimer } from "../../components/DisclaimerModal";
 
@@ -234,6 +234,10 @@ export default function ConversationalOnboarding({ navigation }: any) {
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [collectedBenchmarks, setCollectedBenchmarks] = useState<UserBenchmarks | null>(null);
   const [collectedExperienceLevel, setCollectedExperienceLevel] = useState<"new" | "experienced" | null>(null);
+  // v2.4.12 Change 3: tier verdict shown on the confirmation step (experienced
+  // path only). Lifted from handleComplete so it can be displayed before plan
+  // generation; handleComplete still recomputes the same deterministic verdict.
+  const [pendingTier, setPendingTier] = useState<TrainerTier | null>(null);
 
   // Disclaimer modal — blocking, once-per-device gate before plan generation
   const [disclaimerVisible, setDisclaimerVisible] = useState(false);
@@ -903,6 +907,7 @@ export default function ConversationalOnboarding({ navigation }: any) {
         return (
           <BenchmarkInput
             programPath={(selectedPath || "hybrid_athlete") as any}
+            initialBenchmarks={collectedBenchmarks ?? undefined}
             onBack={() => goToStep(8)}
             onComplete={({ experienceLevel: exp, benchmarks: bm }) => {
               // Inject bodyweight from earlier onboarding step
@@ -911,12 +916,74 @@ export default function ConversationalOnboarding({ navigation }: any) {
               }
               setCollectedExperienceLevel(exp);
               setCollectedBenchmarks(bm);
-              gateAndComplete(exp, bm);
+              // "I'm new" → beginner by definition, nothing to confirm. Experienced
+              // path → show the tier verdict for confirmation (Change 3).
+              if (exp === "new") {
+                gateAndComplete(exp, bm);
+                return;
+              }
+              const tier = assignTier((selectedPath || "hybrid_athlete") as any, bm, exp);
+              setPendingTier(tier);
+              if (__DEV__) console.log(`[ARNOLD TIER] confirmation shown tier=${tier}`);
+              goToStep(10);
             }}
           />
         );
 
-      // Steps 10+ - Placeholders  
+      // Step 10 - Tier verdict confirmation (Change 3, experienced path only)
+      case 10: {
+        const tier = pendingTier ?? "intermediate";
+        const path = (selectedPath || "hybrid_athlete") as string;
+        const title =
+          tier === "advanced" ? "You're Advanced"
+          : tier === "intermediate" ? "You're Intermediate"
+          : "Starting as Beginner";
+        const intermediateBody: Record<string, string> = {
+          street_lifter: "Weighted progressions with periodized intensity, calibrated to your numbers.",
+          skill_builder: "Skill-focused programming with Prilepin-based holds, calibrated to your assessed levels.",
+          hybrid_athlete: "Combined weighted strength and skill work, periodized to your numbers.",
+        };
+        const body =
+          tier === "beginner"
+            ? "We'll start with the fundamentals and build a strong base before adding load."
+            : (intermediateBody[path] ?? intermediateBody.hybrid_athlete);
+        const advancedNote =
+          tier === "advanced"
+            ? " Arnold's advanced program is in development — you'll run the intermediate program at your weights."
+            : "";
+        return (
+          <View style={styles.stepContainer}>
+            <BackButton onPress={() => goToStep(9)} />
+            <StepDots current={10} total={10} />
+
+            <Text style={styles.stepTitle}>{title}</Text>
+            <Text style={styles.stepSubtitle}>{body}{advancedNote}</Text>
+
+            <View style={{ marginTop: spacing.xl }}>
+              <PrimaryButton
+                label="Sounds right"
+                onPress={() => {
+                  if (__DEV__) console.log("[ARNOLD TIER] confirmation confirmed");
+                  if (collectedExperienceLevel && collectedBenchmarks) {
+                    gateAndComplete(collectedExperienceLevel, collectedBenchmarks);
+                  }
+                }}
+              />
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => {
+                  if (__DEV__) console.log("[ARNOLD TIER] confirmation redo");
+                  goToStep(9); // BenchmarkInput re-mounts with initialBenchmarks pre-filled
+                }}
+              >
+                <Text style={styles.secondaryButtonText}>Let me redo my numbers</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      }
+
+      // Steps 11+ - Placeholders
       default:
         return (
           <View style={styles.placeholderContainer}>
