@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { colors } from "../../theme";
 import type { UserBenchmarks, FrontLeverLevel, PlancheLevel } from "../../types";
-import { isDevUser } from "../../config/devAccess";
+import { isDevUser, DEV_PREFILL } from "../../config/devAccess";
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -276,7 +276,7 @@ const isValidNumber = (s: string): boolean => {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export default function BenchmarkInput({ programPath, onComplete, onBack }: BenchmarkInputProps) {
-  const [step, setStep] = useState<"filter" | number>(__DEV__ || isDevUser() ? 0 : "filter");
+  const [step, setStep] = useState<"filter" | number>((__DEV__ || isDevUser()) && DEV_PREFILL ? 0 : "filter");
 
   // All numeric state is string — parsed only on final submit.
   //
@@ -288,12 +288,12 @@ export default function BenchmarkInput({ programPath, onComplete, onBack }: Benc
   // made every dev chat-test misleading: Arnold correctly judged the inputs
   // as a probable data error and refused to coach on them.
   const [repsValues, setRepsValues] = useState<Record<string, string>>(
-    (__DEV__ || isDevUser())
+    (__DEV__ || isDevUser()) && DEV_PREFILL
       ? { pullups: "5", dips: "8", squat: "20" }
       : {}
   );
   const [weightValues, setWeightValues] = useState<Record<string, string>>(
-    (__DEV__ || isDevUser())
+    (__DEV__ || isDevUser()) && DEV_PREFILL
       ? { pullups: "0", dips: "0", squat: "0" }
       : {}
   );

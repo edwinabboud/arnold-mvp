@@ -41,7 +41,7 @@ import {
   capturePlanGenerated,
 } from "../../services/analytics";
 import type { UserBenchmarks } from "../../types";
-import { isDevUser } from "../../config/devAccess";
+import { isDevUser, DEV_PREFILL } from "../../config/devAccess";
 import DisclaimerModal, { hasAcknowledgedDisclaimer } from "../../components/DisclaimerModal";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -212,8 +212,8 @@ export default function ConversationalOnboarding({ navigation }: any) {
   
   // Step 1 - About You
   const [useMetric, setUseMetric] = useState(true);
-  const [userWeight, setUserWeight] = useState(__DEV__ || isDevUser() ? "70" : "");
-  const [userHeight, setUserHeight] = useState(__DEV__ || isDevUser() ? "170" : "");
+  const [userWeight, setUserWeight] = useState((__DEV__ || isDevUser()) && DEV_PREFILL ? "70" : "");
+  const [userHeight, setUserHeight] = useState((__DEV__ || isDevUser()) && DEV_PREFILL ? "170" : "");
   
   // Step 2 - Program Path Selection
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
