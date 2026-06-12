@@ -244,13 +244,40 @@ const SKILL_BUILDER_QUESTIONS: Question[] = [
       { id: "full", label: "Full" },
     ],
   },
+  // v2.4.12 Change 4: front lever is Prilepin-programmed (skill day) and needs an
+  // assessed hold, not just a level. "Can't do this yet" → 0.
+  {
+    id: "frontLeverHold",
+    title: "Longest front lever hold?",
+    subtitle: "Hardest variation you can hold — 0 if you can't yet",
+    type: "number",
+    unit: "sec",
+    min: 0,
+    max: 300,
+  },
 ];
+
+// v2.4.12 Change 4: planche hold (seconds) — hybrid's skill day Prilepin-programs
+// planche, so it needs an assessed hold. Skill Builder does NOT program planche,
+// so this question is hybrid-only.
+const PLANCHE_HOLD_QUESTION: Question = {
+  id: "plancheHold",
+  title: "Longest planche hold?",
+  subtitle: "Hardest variation you can hold — 0 if you can't yet",
+  type: "number",
+  unit: "sec",
+  min: 0,
+  max: 300,
+};
 
 const HYBRID_QUESTIONS: Question[] = [
   STREET_LIFTER_QUESTIONS[0], // pullups
   STREET_LIFTER_QUESTIONS[1], // dips
-  SKILL_BUILDER_QUESTIONS[0], // handstand
-  SKILL_BUILDER_QUESTIONS[1], // frontLever
+  SKILL_BUILDER_QUESTIONS[0], // handstand (seconds)
+  SKILL_BUILDER_QUESTIONS[1], // frontLever (level — used by tier assignment)
+  SKILL_BUILDER_QUESTIONS[2], // lsit (seconds) — hybrid Prilepin-programs L-sit
+  SKILL_BUILDER_QUESTIONS[4], // frontLeverHold (seconds) — appended FL hold
+  PLANCHE_HOLD_QUESTION,      // planche hold (seconds) — hybrid programs planche
 ];
 
 const QUESTIONS_BY_PATH: Record<string, Question[]> = {
@@ -398,6 +425,13 @@ export default function BenchmarkInput({ programPath, onComplete, onBack }: Benc
     }
     if (levelValues["planche"]) {
       benchmarks.plancheLevel = levelValues["planche"] as PlancheLevel;
+    }
+    // v2.4.12 Change 4 — assessed skill holds (seconds) for Prilepin programming.
+    if (numberValues["frontLeverHold"] !== undefined && numberValues["frontLeverHold"] !== "") {
+      benchmarks.frontLeverHoldSec = parseNum(numberValues["frontLeverHold"]);
+    }
+    if (numberValues["plancheHold"] !== undefined && numberValues["plancheHold"] !== "") {
+      benchmarks.plancheHoldSec = parseNum(numberValues["plancheHold"]);
     }
 
     onComplete({ experienceLevel: "experienced", benchmarks });

@@ -51,13 +51,33 @@ function getPrilepinHoldProgramming(maxHoldSeconds: number): { sets: number; hol
   return { sets: 3, holdTime: Math.round(maxHoldSeconds * 0.65) };
 }
 
-/** Estimate max hold from progression order since we don't have actual times */
-function estimateMaxHold(progressionId: string): number {
-  const prog = PROGRESSIONS.find(p => p.id === progressionId);
-  if (!prog) return 8;
-  if (prog.order <= 2) return 8;   // beginner: ~8s max
-  if (prog.order <= 5) return 15;  // mid: ~15s max
-  return 25;                        // advanced: ~25s max
+// v2.4.12 Change 4: Prilepin hold programming runs off the user's ASSESSED max
+// holds (BenchmarkInput) instead of a progression-order estimate. estimateMaxHold
+// is gone. The generator is synchronous and non-reentrant, so the benchmarks for
+// the current generation are held module-level rather than threaded through every
+// session builder. Reset at the top of generateSkillBuilderIntermediate.
+type HoldSkill = "handstand" | "lsit" | "frontLever" | "planche";
+const HOLD_FIELD: Record<HoldSkill, keyof UserBenchmarks> = {
+  handstand: "handstandHoldSec",
+  lsit: "lSitHoldSec",
+  frontLever: "frontLeverHoldSec",
+  planche: "plancheHoldSec",
+};
+let genBenchmarks: UserBenchmarks | undefined;
+let unassessedHolds: Set<string> = new Set();
+
+/**
+ * Assessed max hold (seconds) for a skill, from onboarding benchmarks. Fallback:
+ * an unassessed/zero hold → 5s baseline + calibration log + an unassessed flag the
+ * conversation packet can surface. "Can't do this yet" (0) and "never asked"
+ * (undefined) both fall through to the baseline.
+ */
+function assessedHold(skill: HoldSkill): number {
+  const v = genBenchmarks?.[HOLD_FIELD[skill]] as number | undefined;
+  if (typeof v === "number" && v > 0) return v;
+  unassessedHolds.add(skill);
+  console.log(`[ARNOLD CALIBRATION] ${skill} hold unassessed — 5s baseline`);
+  return 5;
 }
 
 // ── Phase-specific Programming ──────────────────────────────────────────────
@@ -270,8 +290,9 @@ function makeSkillPracticeIso(
   progressionId: string,
   name: string | null,
   isDeload: boolean,
+  skill: HoldSkill,
 ): PlannedExercise {
-  const halfMax = Math.max(3, Math.round(estimateMaxHold(progressionId) / 2));
+  const halfMax = Math.max(3, Math.round(assessedHold(skill) / 2));
   return makeEx(id, progressionId, name, "skill_practice",
     isDeload ? 1 : 2, halfMax, 60, "easy",
     { holdSeconds: halfMax, notes: "Submaximal — practice technique, stop before failure" });
@@ -299,8 +320,9 @@ function makeSkillIsometric(
   progressionId: string,
   name: string | null,
   isDeload: boolean,
+  skill: HoldSkill,
 ): PlannedExercise {
-  const prilepin = getPrilepinHoldProgramming(estimateMaxHold(progressionId));
+  const prilepin = getPrilepinHoldProgramming(assessedHold(skill));
   const sets = isDeload ? 2 : prilepin.sets;
   const holdSeconds = isDeload
     ? Math.max(3, Math.round(prilepin.holdTime / 2))
@@ -374,9 +396,9 @@ function buildSessionA(
 
   const exercises: PlannedExercise[] = [
     // Slot 2 — skill practice (handstand, submaximal)
-    makeSkillPracticeIso(`${prefix}_sk_p`, hsId, null, isDeload),
+    makeSkillPracticeIso(`${prefix}_sk_p`, hsId, null, isDeload, "handstand"),
     // Slot 3 — skill isometric (L-sit, Prilepin)
-    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload),
+    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload, "lsit"),
     // Slot 4 — complementary lift (phase-aware)
     makeEx(`${prefix}_comp`, ppId, null, "complementary",
       isDeload ? 2 : sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
@@ -425,7 +447,7 @@ function buildSessionB(
     // Slot 2 — skill practice (Skin the Cat — dynamic, reps-based)
     makeSkillPracticeDynamic(`${prefix}_sk_p`, "supplementary_skin_the_cat", "Skin the Cat", isDeload),
     // Slot 3 — skill isometric (front lever, Prilepin)
-    makeSkillIsometric(`${prefix}_sk_i`, flId, null, isDeload),
+    makeSkillIsometric(`${prefix}_sk_i`, flId, null, isDeload, "frontLever"),
     // Slot 4 — complementary lift (row variant)
     makeEx(`${prefix}_comp`, rowId, null, "complementary",
       isDeload ? 2 : sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
@@ -470,13 +492,13 @@ function buildSessionC(
   const coreIdx = coreTree.findIndex(p => p.id === coreId);
   const flIdx = coreTree.findIndex(p => p.id === "core_09");
   const flId = (flIdx >= 0 && coreIdx >= flIdx) ? "core_09" : coreId;
-  const flPrilepin = getPrilepinHoldProgramming(estimateMaxHold(flId));
+  const flPrilepin = getPrilepinHoldProgramming(assessedHold("frontLever"));
 
   const exercises: PlannedExercise[] = [
     // Slot 2 — skill practice (handstand submaximal)
-    makeSkillPracticeIso(`${prefix}_sk_p`, hsId, null, isDeload),
+    makeSkillPracticeIso(`${prefix}_sk_p`, hsId, null, isDeload, "handstand"),
     // Slot 3 — skill isometric (L-sit, primary, Prilepin)
-    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload),
+    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload, "lsit"),
     // Slot 4 — complementary (front lever variant — itself an isometric, but
     // running it as the "complementary" slot keeps the 5-entry shape and
     // gives the user a second skill movement on this dedicated skill day)
@@ -526,9 +548,9 @@ function buildSessionD(
 
   const exercises: PlannedExercise[] = [
     // Slot 2 — skill practice (L-sit submaximal)
-    makeSkillPracticeIso(`${prefix}_sk_p`, lsitId, null, isDeload),
+    makeSkillPracticeIso(`${prefix}_sk_p`, lsitId, null, isDeload, "lsit"),
     // Slot 3 — skill isometric (handstand, Prilepin)
-    makeSkillIsometric(`${prefix}_sk_i`, hsId, null, isDeload),
+    makeSkillIsometric(`${prefix}_sk_i`, hsId, null, isDeload, "handstand"),
     // Slot 4 — complementary (heavy push pulled into D for strength focus)
     makeEx(`${prefix}_comp`, pushId, null, "complementary",
       isDeload ? 2 : sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
@@ -570,9 +592,9 @@ function buildSessionE(
 
   const exercises: PlannedExercise[] = [
     // Slot 2 — skill practice (L-sit submaximal)
-    makeSkillPracticeIso(`${prefix}_sk_p`, lsitId, null, isDeload),
+    makeSkillPracticeIso(`${prefix}_sk_p`, lsitId, null, isDeload, "lsit"),
     // Slot 3 — skill isometric (L-sit, Prilepin)
-    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload),
+    makeSkillIsometric(`${prefix}_sk_i`, lsitId, null, isDeload, "lsit"),
     // Slot 4 — complementary (squat, phase-aware)
     makeEx(`${prefix}_comp`, "legs_01", getName("legs_01"), "complementary",
       isDeload ? 2 : sp.sets, isDeload ? 6 : reps, isDeload ? 120 : 180,
@@ -604,6 +626,9 @@ export function generateSkillBuilderIntermediate(
   progressions: UserProgression[],
   benchmarks?: UserBenchmarks,
 ): Mesocycle {
+  // Bind the assessed-hold source for this generation (see assessedHold()).
+  genBenchmarks = benchmarks;
+  unassessedHolds = new Set();
   const mesoId = `meso_skb_int_${Date.now()}`;
   const daysPerWeek = Math.min(Math.max(schedule.daysPerWeek, 2), 5);
   const sessionsPerWeek = daysPerWeek;

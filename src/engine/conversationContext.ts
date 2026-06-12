@@ -36,8 +36,37 @@ import type {
   SessionSummaryExercise,
   SessionTier,
   TrainerTier,
+  UserBenchmarks,
   UserProfile,
 } from "../types";
+
+// v2.4.12 Change 4: which skills each path Prilepin-programs (so a 0/undefined
+// assessed hold means the generator fell back to a 5s baseline). Kept in lockstep
+// with the skill-day Prilepin work in the intermediate generators.
+const PRILEPIN_HOLD_SKILLS_BY_PATH: Record<string, Array<{ skill: string; field: keyof UserBenchmarks }>> = {
+  skill_builder: [
+    { skill: "handstand", field: "handstandHoldSec" },
+    { skill: "lsit", field: "lSitHoldSec" },
+    { skill: "frontLever", field: "frontLeverHoldSec" },
+  ],
+  hybrid_athlete: [
+    { skill: "handstand", field: "handstandHoldSec" },
+    { skill: "lsit", field: "lSitHoldSec" },
+    { skill: "frontLever", field: "frontLeverHoldSec" },
+    { skill: "planche", field: "plancheHoldSec" },
+  ],
+};
+
+function computeUnassessedHolds(profile: UserProfile): string[] {
+  const programmed = PRILEPIN_HOLD_SKILLS_BY_PATH[profile.programPath] ?? [];
+  const bm = profile.benchmarks;
+  return programmed
+    .filter(({ field }) => {
+      const v = bm?.[field] as number | undefined;
+      return !(typeof v === "number" && v > 0);
+    })
+    .map(({ skill }) => skill);
+}
 
 // ── Session-type resolver (§1.3 row identifier) ───────────────────────────────
 
@@ -681,6 +710,9 @@ export function buildConversationContextPacket(
       // profile so Arnold can name the lever combination ("we're holding
       // the heavy work and trimming the volume work today").
       compressionProfile: null,
+      // v2.4.12 Change 4: Prilepin-programmed skills with no assessed hold (the
+      // generator used a 5s baseline for these). Computed from benchmarks + path.
+      unassessedHolds: computeUnassessedHolds(profile),
     },
     goals: {
       // No `arnold-path-specific-goals` knowledge source ships in MVP — pathGoals
@@ -811,6 +843,9 @@ export function conversationContextPacketToString(packet: ConversationContextPac
     out.push(`  compression: levers=[${u.compressionProfile.leversApplied.join(", ")}] — ${u.compressionProfile.rationale}`);
   } else {
     out.push(`  compression: null (full session — v2.4.9 Part 1 has compression disabled)`);
+  }
+  if (u.unassessedHolds && u.unassessedHolds.length > 0) {
+    out.push(`  unassessedHolds: ${u.unassessedHolds.join(", ")} — max hold not assessed at onboarding; skill-day Prilepin used a 5s baseline (suggest reassessing)`);
   }
 
   // Goals

@@ -72,12 +72,27 @@ function getWaveReps(phase: PlanPhase, weekInPhase: number): number {
 
 // ── Prilepin (for skill day) ────────────────────────────────────────────────
 
-function estimateMaxHold(progressionId: string): number {
-  const prog = PROGRESSIONS.find(p => p.id === progressionId);
-  if (!prog) return 8;
-  if (prog.order <= 2) return 8;
-  if (prog.order <= 5) return 15;
-  return 25;
+// v2.4.12 Change 4: skill-day Prilepin runs off ASSESSED holds (BenchmarkInput),
+// not a progression-order estimate. estimateMaxHold is gone. Benchmarks for the
+// current (synchronous, non-reentrant) generation are held module-level rather
+// than threaded through buildSkillDay. Reset in generateHybridAthleteIntermediate.
+type HoldSkill = "handstand" | "lsit" | "frontLever" | "planche";
+const HOLD_FIELD: Record<HoldSkill, keyof UserBenchmarks> = {
+  handstand: "handstandHoldSec",
+  lsit: "lSitHoldSec",
+  frontLever: "frontLeverHoldSec",
+  planche: "plancheHoldSec",
+};
+let genBenchmarks: UserBenchmarks | undefined;
+let unassessedHolds: Set<string> = new Set();
+
+/** Assessed max hold (s) for a skill; unassessed/zero → 5s baseline + log + flag. */
+function assessedHold(skill: HoldSkill): number {
+  const v = genBenchmarks?.[HOLD_FIELD[skill]] as number | undefined;
+  if (typeof v === "number" && v > 0) return v;
+  unassessedHolds.add(skill);
+  console.log(`[ARNOLD CALIBRATION] ${skill} hold unassessed — 5s baseline`);
+  return 5;
 }
 
 function getPrilepin(maxHoldSeconds: number): { sets: number; holdTime: number } {
@@ -394,16 +409,16 @@ function buildSkillDay(
   const hsId = skillIdx >= 2 ? skillId : "skill_03";
   const plancheId = skillIdx >= 5 ? skillId : "skill_06";
 
-  const hsPrilepin = getPrilepin(estimateMaxHold(hsId));
-  const plPrilepin = getPrilepin(estimateMaxHold(plancheId));
-  const lsitPrilepin = getPrilepin(estimateMaxHold(lsitId));
+  const hsPrilepin = getPrilepin(assessedHold("handstand"));
+  const plPrilepin = getPrilepin(assessedHold("planche"));
+  const lsitPrilepin = getPrilepin(assessedHold("lsit"));
 
   // Front lever
   const coreTree = getProgressionTree("core");
   const coreIdx = coreTree.findIndex(p => p.id === coreId);
   const flIdx = coreTree.findIndex(p => p.id === "core_09");
   const flId = (flIdx >= 0 && coreIdx >= flIdx) ? "core_09" : coreId;
-  const flPrilepin = getPrilepin(estimateMaxHold(flId));
+  const flPrilepin = getPrilepin(assessedHold("frontLever"));
 
   const isSpecOrTest = phase === "specialization" || phase === "test";
   // During specialization (weighted emphasis), skill day = maintenance
@@ -586,6 +601,8 @@ export function generateHybridAthleteIntermediate(
   progressions: UserProgression[],
   benchmarks?: UserBenchmarks,
 ): Mesocycle {
+  genBenchmarks = benchmarks;
+  unassessedHolds = new Set();
   const mesoId = `meso_hyb_int_${Date.now()}`;
   const daysPerWeek = schedule.daysPerWeek;
   const structure = daysPerWeek >= 5 ? "B" : "A";
