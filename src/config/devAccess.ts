@@ -68,3 +68,21 @@ export function isDevUser(): boolean {
  * normalization + exact-match behavior.
  */
 export const __testing__ = { normalizeEmail, DEV_ALLOWLIST };
+
+// ── Real-user mode toggle (v2.4.12) ──────────────────────────────────────────
+// Dev conveniences (pre-filled weight/height/benchmarks, skipped experience
+// filter) are gated on (__DEV__ || isDevUser()), always on for the dev account.
+// This flag lets a dev flip those OFF at runtime to walk the real new-user
+// onboarding flow without a separate build. Module-level, no persistence; DEV
+// RESET deliberately does NOT reset it. Defaults ON so existing behavior is
+// unchanged — gate sites read (__DEV__ || isDevUser()) && DEV_PREFILL.
+export let DEV_PREFILL = true;
+
+export function setDevPrefill(on: boolean): void {
+  DEV_PREFILL = on;
+}
+
+export function toggleDevPrefill(): boolean {
+  DEV_PREFILL = !DEV_PREFILL;
+  return DEV_PREFILL;
+}

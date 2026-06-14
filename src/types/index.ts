@@ -114,6 +114,15 @@ export interface ConversationContextPacket {
       reps: number;
     } | null>;
     /**
+     * v2.4.12 Change 4 — Prilepin-programmed skills whose max hold was not
+     * assessed at onboarding (0/undefined), so the generator used a 5s baseline.
+     * No natural calibration/flags slot existed in the packet, so this field was
+     * added (FLAGGED). Empty array = all programmed holds assessed (or path has
+     * no skill Prilepin work). Optional so non-chat packet literals/tests are
+     * unaffected; the chat builder always sets it.
+     */
+    unassessedHolds?: string[];
+    /**
      * v2.4.9 §5 — explains the lever combination behind a compressed session
      * so Arnold can speak to "why is this short?" in coaching language.
      * Always null for `sessionTier === "recommended"` and null everywhere
@@ -212,6 +221,11 @@ export interface UserBenchmarks {
   frontLeverLevel?: FrontLeverLevel;
   plancheLevel?: PlancheLevel;
   lSitHoldSec?: number;
+  // v2.4.12 Change 4 — assessed max-hold seconds for Prilepin-programmed skills
+  // that previously only had a categorical level. Drive the skill-day Prilepin
+  // prescriptions; unassessed/0 → 5s baseline in the generators.
+  frontLeverHoldSec?: number;
+  plancheHoldSec?: number;
 
   // Meta
   collectedAt?: string; // ISO timestamp

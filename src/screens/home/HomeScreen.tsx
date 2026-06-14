@@ -18,7 +18,7 @@ import { colors, typography, spacing, radius } from "../../theme";
 import { findCurrentSession, getCascadeCandidate, getSessionSummary, getWeekSessions } from "../../utils/sessionFinder";
 import { PlannedSession } from "../../types";
 import { supabase } from "../../config/supabase";
-import { isDevUser } from "../../config/devAccess";
+import { isDevUser, DEV_PREFILL, toggleDevPrefill } from "../../config/devAccess";
 
 const formatPathName = (path: string): string => {
   switch (path) {
@@ -68,6 +68,9 @@ export default function HomeScreen({ navigation }: any) {
   const adaptationQueue = useStore((s) => s.adaptationQueue);
   const lastAppliedAdjustments = useStore((s) => s.lastAppliedAdjustments);
   const [debugOpen, setDebugOpen] = useState(false);
+  // Mirror of the module-level DEV_PREFILL flag so the DEBUG row re-renders when
+  // toggled (the flag itself is non-reactive).
+  const [devPrefillOn, setDevPrefillOn] = useState(DEV_PREFILL);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [overrideSession, setOverrideSession] = useState<PlannedSession | null>(null);
   // When the user taps "Undo" on the cascade pill, suppress cascade for
@@ -370,6 +373,16 @@ export default function HomeScreen({ navigation }: any) {
         {(__DEV__ || isDevUser()) && debugOpen && (
           <View style={debugStyles.panel}>
             <Text style={debugStyles.heading}>Autoregulation Loop</Text>
+
+            <Text style={debugStyles.section}>Real-user mode</Text>
+            <TouchableOpacity
+              style={[debugStyles.simButton, { alignSelf: "flex-start", marginBottom: 8, backgroundColor: "rgba(255,255,255,0.06)", paddingHorizontal: 14 }]}
+              onPress={() => setDevPrefillOn(toggleDevPrefill())}
+            >
+              <Text style={debugStyles.simButtonText}>
+                Dev pre-fill: {devPrefillOn ? "ON" : "OFF"}
+              </Text>
+            </TouchableOpacity>
 
             <Text style={debugStyles.section}>Simulate session</Text>
             <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>

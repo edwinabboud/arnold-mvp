@@ -93,9 +93,9 @@ export function generateHybridAthleteBeginner(
 
       // Update label to reflect hybrid nature
       if (session.label.includes("Pull")) {
-        session.label = "Hybrid Pull (A)";
+        session.label = "Hybrid Pull — Strength + Skill (A)";
       } else if (session.label.includes("Push")) {
-        session.label = "Hybrid Push (B)";
+        session.label = "Hybrid Push — Strength + Skill (B)";
       } else if (session.label.includes("Legs")) {
         session.label = "Hybrid Full Body (C)";
       }
