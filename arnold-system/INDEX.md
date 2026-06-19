@@ -26,3 +26,6 @@ Single entry point. Read this before treating any spec file as live.
 - v2.4.10 — blocked on Overview decision text.
 - v2.4.11 — pre-start session preview; write if/when scheduled.
 - arnold-product-spec-v2_5.md — eventual merge of all amendments. Not yet created.
+
+## Snapshot maintenance
+Whenever any brain file changes (spec, amendment, bible, strategy, handoff, or INDEX), regenerate BRAIN-SNAPSHOT.md by running scripts/build-brain-snapshot.sh, commit it in the SAME commit as the change, and tell Edwin in the report: 'BRAIN-SNAPSHOT.md updated — re-download and update your Claude.ai project files.' This keeps the paste-able brain current so future chats always load the right context.
