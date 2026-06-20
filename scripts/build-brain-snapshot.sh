@@ -18,8 +18,11 @@ ROOT="arnold-system"
 OUT="$ROOT/BRAIN-SNAPSHOT.md"
 INDEX="$ROOT/INDEX.md"
 
-# Latest handoff only. Update this when a newer handoff is migrated in.
-LATEST_HANDOFF="$ROOT/handoffs/migration-2026-06.md"
+# Handoffs to include (both the build and migration records). Add new ones here.
+HANDOFFS=(
+  "$ROOT/handoffs/build-2026-06.md"
+  "$ROOT/handoffs/migration-2026-06.md"
+)
 
 SHA="$(git rev-parse --short HEAD)"
 DATE="$(date +%Y-%m-%d)"
@@ -75,7 +78,7 @@ emit "$ROOT/strategy/arnold-mvp-builder-instructions-v2_2.md"
 # 6. bibles (*.md only — excludes .docx)
 for f in "$ROOT"/bibles/*.md; do emit "$f"; done
 
-# 7. latest handoff only
-emit "$LATEST_HANDOFF"
+# 7. handoffs (build + migration)
+for f in "${HANDOFFS[@]}"; do emit "$f"; done
 
 echo "Wrote $OUT — $(wc -c < "$OUT" | tr -d ' ') bytes" >&2
