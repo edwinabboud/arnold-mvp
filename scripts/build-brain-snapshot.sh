@@ -54,8 +54,9 @@ emit() {
 # Header (truncate/create the file).
 printf 'Generated %s from main %s. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.\n' "$DATE" "$SHA" > "$OUT"
 
-# 1. INDEX
+# 1. INDEX + PROTOCOL (top-level governance files)
 emit "$INDEX"
+emit "$ROOT/PROTOCOL.md"
 
 # 2. spec
 for f in "$ROOT"/spec/*.md; do emit "$f"; done

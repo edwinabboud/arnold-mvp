@@ -1,5 +1,7 @@
 # INDEX — spec currency (which file is authoritative)
 
+After any brain change, run arnold-system/PROTOCOL.md (Edwin says 'Run the protocol').
+
 Single entry point. Read this before treating any spec file as live.
 
 ## Current / authoritative
