@@ -58,6 +58,12 @@ printf 'Generated %s from main %s. This is a snapshot for pasting into Claude.ai
 emit "$INDEX"
 emit "$ROOT/PROTOCOL.md"
 
+# 1b. Operational files — highest-signal "what to work on now" context, placed
+# near the top so a snapshot-hydrated chat sees current focus before the specs.
+emit "$ROOT/FOCAL.md"
+emit "$ROOT/DEPENDENCIES.md"
+emit "$ROOT/OPEN-DECISIONS.md"
+
 # 2. spec
 for f in "$ROOT"/spec/*.md; do emit "$f"; done
 

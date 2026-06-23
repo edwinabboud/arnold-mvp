@@ -1,4 +1,4 @@
-Generated 2026-06-23 from main becf6f4. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
+Generated 2026-06-23 from main 2a158cb. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
 
 ===== arnold-system/INDEX.md =====
 
@@ -93,6 +93,89 @@ How Edwin triggers this
 After a brain change is decided, Edwin says:
 "Run the protocol."
 CC then opens this file (arnold-system/PROTOCOL.md), works the checklist top to bottom, and produces the final report above.
+
+===== arnold-system/FOCAL.md =====
+
+# FOCAL — what matters right now
+
+**Updated:** June 23, 2026 (Build 9 shipped to TestFlight)
+**Build state:** `main` at `becf6f4`; tag **mvp-1.20** is the live code state, tsc baseline 43, tree clean, v2.4.12 shipped. **mvp-1.20 code is live on TestFlight as Build 9** (shipped June 22, 2026; see build-2026-06.md).
+**The one goal:** Get Arnold in front of people who are not Edwin and find out if anyone trains a SECOND time. The retention number is the only thing that resolves the open guesses.
+
+Everything below serves that. If a task isn't here or unblocking it, question it.
+
+## NON-NEGOTIABLE next human action
+- [ ] **→ NOW LIVE: Send the 5 TestFlight texts (public link) + confirm installs.** The build dependency is cleared — Build 9 (mvp-1.20 code) is on TestFlight as of June 22, so there is nothing left to wait on. #1 priority, still unsent; both chats flag this as the avoidance object. Nothing else starts until this is done.
+- [ ] Watch one stranger use Arnold (~10 min, Madrid park) — first real ICP signal.
+- [ ] The number: did anyone train twice (week-4 retention >30% gate).
+
+## Capped polish pass (means to shipping, not a goal)
+- [ ] 3-day / 5-surface polish so "looks vibe-coded" stops blocking you psychologically. HARD CAP. This is Build's "validate quality myself first" reconciled with Overview's "cap it then ship." Uncapped = avoidance.
+
+## Ship-blockers (do in parallel, none depend on the texts)
+- [ ] Decide final app name — resolve "Arnold" vs "Arnold Coach" conflict (see OPEN-DECISIONS).
+- [ ] Privacy: enable GitHub Pages, paste URL into App Store Connect, get Overview review per v2.4.6. (Drafts already committed in docs/.)
+- [x] ~~Decide mvp-1.20 → TestFlight build: now, or after the capped polish pass.~~ DONE — shipped now (Build 9, June 22, 2026); ship-now path taken, capped polish pass not gated ahead of it.
+- [ ] App Store screenshots, keywords, description (needs final name).
+
+## Parked until the retention gate clears
+Coach-vs-chatbot rebuild, v2.4.9 Part 2 compression tables, v2.4.10 coach-data, v2.4.11 preview, custom/fine-tuned model, Reddit/content/referral/ads, Phase 2 (voice, 3D, wearables). Map exists; only "Now" is live.
+
+===== arnold-system/DEPENDENCIES.md =====
+
+# DEPENDENCIES — what blocks what
+
+Reconciled from both handoffs. v2.4.8 is NOT a blocker (live on main).
+
+## Critical path → App Store submission
+1. **Final app name** — "Arnold" vs "Arnold Coach" (ASC listing is currently "Arnold Coach"). Blocks screenshots + listing. See OPEN-DECISIONS.
+2. **Privacy live** — enable GitHub Pages on docs/privacy.md, paste URL into App Store Connect (Apple blocker), get Overview review per v2.4.6. Drafts already committed (commit 2171113).
+3. **mvp-1.20 → TestFlight build** — decided-but-not-executed. Ship now vs after capped polish pass.
+4. **Store assets** — screenshots, keywords, description. Needs final name + final UI.
+5. **Submit** (status is "Prepare for Submission", not yet in review).
+
+## Not on the critical path (real, but tidy-up)
+- **`UserProfile.goals` type drift** — 2 of the 43 baseline tsc errors; onboarding writes a `goals` shape the type doesn't have. Non-crashing, no confirmed data loss. Fix to drive baseline below 43; not a ship blocker.
+- **Session type derived from label substrings** — load-bearing labels; real fix is an explicit `sessionType` field on `PlannedSession` (spec-level, unwritten). Caused the held v2.4.12 #9 rename.
+- **node_modules half-install flakiness** — recurring; workaround is full reinstall + `expo start -c`. Eats sessions; wants a permanent fix.
+
+## Blocked, waiting on a decision (not founder time — inter-chat)
+- **v2.4.10 coach-data calibration** — decision text never delivered to Build; amendment doesn't exist; coach-data work cannot start. **Overview owes this.** See OPEN-DECISIONS.
+
+## Next single task
+> The 5 TestFlight texts. Everything in "Ship-blockers" runs in parallel and none of it depends on the texts — so there is no reason the texts wait.
+
+===== arnold-system/OPEN-DECISIONS.md =====
+
+# OPEN DECISIONS — owed before migration / before ship
+
+Things only Edwin (or a specific chat) can resolve. The migration should NOT execute
+until the founder-owned gates below are answered.
+
+## Founder-owned gates (block the repo migration)
+1. **Repo privacy.** `github.com/edwinabboud/arnold-mvp` is PUBLIC. Putting the brain in it
+   publishes specs + saas-building-guide + launch playbook + ICP/monetization thinking.
+   Decide: (a) flip repo private, (b) split sensitive docs to a private sibling repo, or
+   (c) accept exposure. Edwin has said he wants it private → likely (a). DECIDE BEFORE ANY PUSH.
+2. **Final app name.** "Arnold" (Overview) vs "Arnold Coach" (live ASC listing). Resolve before
+   screenshots/listing. Likely "Arnold — AI Calisthenics Coach" as the store display; confirm.
+
+## Inter-chat owes (block specific work, not the migration)
+3. **Overview → Build: deliver v2.4.10 decision text.** Coach-data calibration is blocked with
+   no amendment. Build cannot start until Overview writes the actual decision.
+
+## Strategic call to lock
+4. **Ship-vs-quality priority.** Overview: get it to strangers now, retention number is #1.
+   Build: quality is the bottleneck, Edwin validates first. Reconcile = capped self-validation
+   (the 3-day polish pass) THEN ship. Overview owns direction; the call is: cap it, then ship.
+   Lock the cap explicitly or it becomes the next avoidance object.
+
+## Carried open flags
+- Schwarzenegger trademark/likeness exposure — before commercial public launch.
+- Does live v2.4.8 architecture actually produce coach-like (agentic) behavior or only Q&A?
+  Build to verify against spec — this is the first quality iteration target, post-feedback.
+- v2.5 spec merge — many amendments now stacked; optional to do during migration (Build suggests
+  yes; Overview roadmap parks it post-validation). Not urgent.
 
 ===== arnold-system/spec/arnold-product-spec-v2_4.md =====
 
