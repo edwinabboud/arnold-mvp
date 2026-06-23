@@ -1,4 +1,4 @@
-Generated 2026-06-23 from main 6834c8c. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
+Generated 2026-06-23 from main becf6f4. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
 
 ===== arnold-system/INDEX.md =====
 
