@@ -9,7 +9,7 @@ These would have been lost on migration. Each should point to a spec/amendment w
 - **One deliverable per session** named up front. Build = one thing shipped; Overview = one decision; never both.
 
 ## Product & naming (Overview)
-- **Name stays "Arnold."** Rename hunt closed. ⚠️ CONFLICT: ASC listing is "Arnold Coach" — unresolved (see OPEN-DECISIONS). Schwarzenegger trademark/likeness check still owed before public launch.
+- **App name LOCKED (July 3, 2026): App Store name = "Arnold Coach"** (keep the live ASC listing as-is), **subtitle = "AI Calisthenics Coach"** (carries the ICP search keyword). Supersedes the earlier "name stays Arnold" call — the Arnold-vs-Arnold-Coach conflict is closed in favor of the live listing; no ASC rename needed. Schwarzenegger trademark/likeness check still owed before public commercial launch.
 - **Custom/fine-tuned model PARKED to Phase 3** (post-funding, 500+ users). Keeps resurfacing; watch it.
 - **Friends = bug-shakeout cohort, not validation.** Real ICP recruited only once stable.
 - **Coach-vs-chatbot insight (product gap, N=1):** Arnold behaves reactively, not agentically. Routed to Build → check interaction-model spec first; build-fix if spec already calls for agentic, amend-first if not. Does NOT jump the queue; becomes the first quality iteration AFTER tester feedback. Open: where does it sting most — onboarding / session start / mid-session?

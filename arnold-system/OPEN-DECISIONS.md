@@ -8,8 +8,10 @@ until the founder-owned gates below are answered.
    publishes specs + saas-building-guide + launch playbook + ICP/monetization thinking.
    Decide: (a) flip repo private, (b) split sensitive docs to a private sibling repo, or
    (c) accept exposure. Edwin has said he wants it private → likely (a). DECIDE BEFORE ANY PUSH.
-2. **Final app name.** "Arnold" (Overview) vs "Arnold Coach" (live ASC listing). Resolve before
-   screenshots/listing. Likely "Arnold — AI Calisthenics Coach" as the store display; confirm.
+2. ~~**Final app name.**~~ ✅ RESOLVED (July 3, 2026): App Store name = **"Arnold Coach"** (keep the
+   live ASC listing as-is), subtitle = **"AI Calisthenics Coach"** (carries the ICP search keyword).
+   Arnold-vs-Arnold-Coach conflict closed in favor of the live listing. Logged in DECISIONS.md; unblocks
+   screenshots/listing. (Schwarzenegger trademark/likeness check still owed before public launch — see Carried open flags.)
 
 ## Inter-chat owes (block specific work, not the migration)
 3. **Overview → Build: deliver v2.4.10 decision text.** Coach-data calibration is blocked with
