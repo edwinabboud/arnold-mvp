@@ -1,14 +1,13 @@
 # FOCAL — what matters right now
 
-**Updated:** July 3, 2026 (app name locked: "Arnold Coach" / "AI Calisthenics Coach")
+**Updated:** July 6, 2026 (strategy pivot — validation moves from F&F to strangers)
 **Build state:** `main` at `becf6f4`; tag **mvp-1.20** is the live code state, tsc baseline 43, tree clean, v2.4.12 shipped. **mvp-1.20 code is live on TestFlight as Build 9** (shipped June 22, 2026; see build-2026-06.md).
 **The one goal:** Get Arnold in front of people who are not Edwin and find out if anyone trains a SECOND time. The retention number is the only thing that resolves the open guesses.
 
 Everything below serves that. If a task isn't here or unblocking it, question it.
 
 ## NON-NEGOTIABLE next human action
-- [ ] **→ NOW LIVE: Send the 5 TestFlight texts (public link) + confirm installs.** The build dependency is cleared — Build 9 (mvp-1.20 code) is on TestFlight as of June 22, so there is nothing left to wait on. #1 priority, still unsent; both chats flag this as the avoidance object. Nothing else starts until this is done.
-- [ ] Watch one stranger use Arnold (~10 min, Madrid park) — first real ICP signal.
+- [ ] **→ NOW LIVE: Enable the TestFlight public link on Build 9 → generate QR code → Madrid park stranger test (watch 2–3 ICP users install + use Arnold live, ~10 min each).** Strategy pivot (founder call, July 3): the F&F testers aren't engaging seriously, so validation moves to strangers — this supersedes the old "send the 5 TestFlight texts" action. Aligns with Overview's recorded position ("get it to strangers now"). The retention goal is unchanged; only the vehicle changed. #1 priority; nothing else starts until this is done.
 - [ ] The number: did anyone train twice (week-4 retention >30% gate).
 
 ## Capped polish pass (means to shipping, not a goal)

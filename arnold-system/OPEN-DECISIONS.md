@@ -4,10 +4,10 @@ Things only Edwin (or a specific chat) can resolve. The migration should NOT exe
 until the founder-owned gates below are answered.
 
 ## Founder-owned gates (block the repo migration)
-1. **Repo privacy.** `github.com/edwinabboud/arnold-mvp` is PUBLIC. Putting the brain in it
-   publishes specs + saas-building-guide + launch playbook + ICP/monetization thinking.
-   Decide: (a) flip repo private, (b) split sensitive docs to a private sibling repo, or
-   (c) accept exposure. Edwin has said he wants it private → likely (a). DECIDE BEFORE ANY PUSH.
+1. ~~**Repo privacy.**~~ ✅ RESOLVED at migration (option **b — split**): specs / amendments / bibles are
+   public in `arnold-system/`; sensitive strategy (saas-building-guide, RES_LLAJUA.xlsx) lives in
+   `arnold-system/strategy/private/`, gitignored — local-only, never pushed, never in the snapshot.
+   Health-checked (git check-ignore + git ls-files confirm nothing under private/ is tracked).
 2. ~~**Final app name.**~~ ✅ RESOLVED (July 3, 2026): App Store name = **"Arnold Coach"** (keep the
    live ASC listing as-is), subtitle = **"AI Calisthenics Coach"** (carries the ICP search keyword).
    Arnold-vs-Arnold-Coach conflict closed in favor of the live listing. Logged in DECISIONS.md; unblocks

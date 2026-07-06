@@ -63,6 +63,7 @@ emit "$ROOT/PROTOCOL.md"
 emit "$ROOT/FOCAL.md"
 emit "$ROOT/DEPENDENCIES.md"
 emit "$ROOT/OPEN-DECISIONS.md"
+emit "$ROOT/DECISIONS.md"   # decision-of-record ledger — belongs in the paste-able brain
 
 # 2. spec
 for f in "$ROOT"/spec/*.md; do emit "$f"; done

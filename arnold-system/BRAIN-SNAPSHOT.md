@@ -1,4 +1,4 @@
-Generated 2026-07-03 from main 9169f52. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
+Generated 2026-07-06 from main 1f4a846. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
 
 ===== arnold-system/INDEX.md =====
 
@@ -98,15 +98,14 @@ CC then opens this file (arnold-system/PROTOCOL.md), works the checklist top to 
 
 # FOCAL — what matters right now
 
-**Updated:** July 3, 2026 (app name locked: "Arnold Coach" / "AI Calisthenics Coach")
+**Updated:** July 6, 2026 (strategy pivot — validation moves from F&F to strangers)
 **Build state:** `main` at `becf6f4`; tag **mvp-1.20** is the live code state, tsc baseline 43, tree clean, v2.4.12 shipped. **mvp-1.20 code is live on TestFlight as Build 9** (shipped June 22, 2026; see build-2026-06.md).
 **The one goal:** Get Arnold in front of people who are not Edwin and find out if anyone trains a SECOND time. The retention number is the only thing that resolves the open guesses.
 
 Everything below serves that. If a task isn't here or unblocking it, question it.
 
 ## NON-NEGOTIABLE next human action
-- [ ] **→ NOW LIVE: Send the 5 TestFlight texts (public link) + confirm installs.** The build dependency is cleared — Build 9 (mvp-1.20 code) is on TestFlight as of June 22, so there is nothing left to wait on. #1 priority, still unsent; both chats flag this as the avoidance object. Nothing else starts until this is done.
-- [ ] Watch one stranger use Arnold (~10 min, Madrid park) — first real ICP signal.
+- [ ] **→ NOW LIVE: Enable the TestFlight public link on Build 9 → generate QR code → Madrid park stranger test (watch 2–3 ICP users install + use Arnold live, ~10 min each).** Strategy pivot (founder call, July 3): the F&F testers aren't engaging seriously, so validation moves to strangers — this supersedes the old "send the 5 TestFlight texts" action. Aligns with Overview's recorded position ("get it to strangers now"). The retention goal is unchanged; only the vehicle changed. #1 priority; nothing else starts until this is done.
 - [ ] The number: did anyone train twice (week-4 retention >30% gate).
 
 ## Capped polish pass (means to shipping, not a goal)
@@ -153,10 +152,10 @@ Things only Edwin (or a specific chat) can resolve. The migration should NOT exe
 until the founder-owned gates below are answered.
 
 ## Founder-owned gates (block the repo migration)
-1. **Repo privacy.** `github.com/edwinabboud/arnold-mvp` is PUBLIC. Putting the brain in it
-   publishes specs + saas-building-guide + launch playbook + ICP/monetization thinking.
-   Decide: (a) flip repo private, (b) split sensitive docs to a private sibling repo, or
-   (c) accept exposure. Edwin has said he wants it private → likely (a). DECIDE BEFORE ANY PUSH.
+1. ~~**Repo privacy.**~~ ✅ RESOLVED at migration (option **b — split**): specs / amendments / bibles are
+   public in `arnold-system/`; sensitive strategy (saas-building-guide, RES_LLAJUA.xlsx) lives in
+   `arnold-system/strategy/private/`, gitignored — local-only, never pushed, never in the snapshot.
+   Health-checked (git check-ignore + git ls-files confirm nothing under private/ is tracked).
 2. ~~**Final app name.**~~ ✅ RESOLVED (July 3, 2026): App Store name = **"Arnold Coach"** (keep the
    live ASC listing as-is), subtitle = **"AI Calisthenics Coach"** (carries the ICP search keyword).
    Arnold-vs-Arnold-Coach conflict closed in favor of the live listing. Logged in DECISIONS.md; unblocks
@@ -178,6 +177,41 @@ until the founder-owned gates below are answered.
   Build to verify against spec — this is the first quality iteration target, post-feedback.
 - v2.5 spec merge — many amendments now stacked; optional to do during migration (Build suggests
   yes; Overview roadmap parks it post-validation). Not urgent.
+
+===== arnold-system/DECISIONS.md =====
+
+# DECISIONS — what stuck
+
+Folded from Overview §2 and Build §6 verbal decisions that were never in a file.
+These would have been lost on migration. Each should point to a spec/amendment where one exists.
+
+## Structure & process (Overview)
+- **Project collapsed to TWO chats: Build + Overview.** Build executes everything (code, amendments, marketing, distribution, design). Overview decides direction + pushes back, writes no deliverables. The old separate Spec chat no longer exists — amendments are written in Build. Pushback layer stays separate on purpose.
+- **Project instructions rewritten** to encode the two-chat model. (Must be mirrored into the local brain on migration.)
+- **One deliverable per session** named up front. Build = one thing shipped; Overview = one decision; never both.
+
+## Product & naming (Overview)
+- **App name LOCKED (July 3, 2026): App Store name = "Arnold Coach"** (keep the live ASC listing as-is), **subtitle = "AI Calisthenics Coach"** (carries the ICP search keyword). Supersedes the earlier "name stays Arnold" call — the Arnold-vs-Arnold-Coach conflict is closed in favor of the live listing; no ASC rename needed. Schwarzenegger trademark/likeness check still owed before public commercial launch.
+- **Custom/fine-tuned model PARKED to Phase 3** (post-funding, 500+ users). Keeps resurfacing; watch it.
+- **Friends = bug-shakeout cohort, not validation.** Real ICP recruited only once stable.
+- **Coach-vs-chatbot insight (product gap, N=1):** Arnold behaves reactively, not agentically. Routed to Build → check interaction-model spec first; build-fix if spec already calls for agentic, amend-first if not. Does NOT jump the queue; becomes the first quality iteration AFTER tester feedback. Open: where does it sting most — onboarding / session start / mid-session?
+
+## Build / engineering (Build)
+- **v2.4.12 (Calibration Eradication) shipped** — tag mvp-1.20, deviations recorded in its amendment.
+- **Tier-confirmation UX:** users change their numbers, never the verdict directly; "I'm new" skips the screen; advanced verdict discloses it runs the intermediate program (no advanced generator exists).
+- **Conservative calibration rules:** below-active progressions → "mastered"; weighted squat maps one below top; FL-only → skill_01; unassessed hold → 5s logged baseline.
+- **Verification division of labor (standing convention):** Claude Code tests everything code-testable (throwaway harness, PASS/FAIL table); Edwin only verifies screens, only when a screen changed. Belongs in next builder-instructions version.
+- **Tags HELD until device verification** — CC commits/pushes on a branch, no merge/tag until Edwin confirms.
+- **DEV_PREFILL toggle exists** — must be OFF to see true first-time onboarding.
+- **v2.4.8 clarifications RESOLVED** (priority-5 single question, behavioralFlags scoped to skips, Endurance future-spec). Live on main, not blocking.
+
+## Distribution (Overview)
+- **Distribution framework v1.1 generated but NOT filed** (held in-chat). Contains locked MVP decision: stop building features, ship to 10, fix only what breaks + build referral, week-4 retention >30% gate. AT RISK if not filed. → file into brain on migration.
+- **Tooling rejections:** Notion stays (one Project Map page). Rejected as premature: Obsidian, Airtable, ClickUp, Figma, Stripe Atlas, "Founder Mode" IG. Long-term org = Claude Code + repo (this migration).
+
+## Pending (decided but not yet written to a spec file)
+- Explicit `sessionType` field on `PlannedSession` — agreed as the real fix for the label-substring fragility; no amendment yet.
+- v2.4.10 decision text — owed by Overview; blocks the amendment.
 
 ===== arnold-system/spec/arnold-product-spec-v2_4.md =====
 
