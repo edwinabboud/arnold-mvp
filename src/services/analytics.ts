@@ -176,3 +176,13 @@ export function captureAdaptationResponse(props: {
 }): void {
   send("adaptation_response", props);
 }
+
+/**
+ * A React render error was caught by the root ErrorBoundary. `component` is a
+ * categorical identifier only — the component name at the top of the React
+ * component stack (e.g. "SessionScreen"), never the error message, stack text,
+ * or any free-form content. Keeps the privacy contract: no message/text/PII.
+ */
+export function captureAppError(props: { component: string }): void {
+  send("app_error", props);
+}

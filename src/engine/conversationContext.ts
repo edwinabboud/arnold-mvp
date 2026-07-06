@@ -715,9 +715,13 @@ export function buildConversationContextPacket(
       unassessedHolds: computeUnassessedHolds(profile),
     },
     goals: {
-      // No `arnold-path-specific-goals` knowledge source ships in MVP — pathGoals
-      // intentionally empty; Prompt B's serializer prints "Goals: not specified".
-      pathGoals: [],
+      // Ranked goals captured at onboarding (profile.goals), ordered by rank and
+      // flattened to goal ids for the agent. Empty array when none were captured
+      // (early/dev profiles) — the serializer then prints the "no goals" line.
+      pathGoals: (profile.goals ?? [])
+        .slice()
+        .sort((a, b) => a.rank - b.rank)
+        .map((g) => g.goal),
       activePR: findActivePR(mesocycle, currentWeekNumber),
     },
     completedSession: completedBlock,

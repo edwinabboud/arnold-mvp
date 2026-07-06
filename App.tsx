@@ -1,11 +1,12 @@
 import React from "react";
-import { StatusBar } from "react-native";
+import { StatusBar, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PostHogProvider } from "posthog-react-native";
 import AppNavigation from "./src/navigation";
 import { configureAPI } from './src/engine/api';
 import { ENV } from './src/config/env';
-import { useBindAnalytics } from "./src/services/analytics";
+import { useBindAnalytics, captureAppError } from "./src/services/analytics";
+import { colors } from "./src/theme";
 // Initialize Claude API on app load
 if (ENV.ANTHROPIC_API_KEY) {
   configureAPI({ apiKey: ENV.ANTHROPIC_API_KEY });
@@ -24,6 +25,83 @@ function AnalyticsBootstrap() {
   useBindAnalytics();
   return null;
 }
+
+/**
+ * Minimal Arnold-styled recovery screen shown when the root ErrorBoundary
+ * catches a render error. Deliberately depends on nothing but theme colors so
+ * it can render even when the app tree it replaced is broken. "Tap to restart"
+ * re-mounts the child tree (soft restart) rather than reloading the process.
+ */
+function RecoveryScreen({ onRestart }: { onRestart: () => void }) {
+  return (
+    <View style={styles.recoveryRoot}>
+      <Text style={styles.recoveryTitle}>Something broke</Text>
+      <TouchableOpacity style={styles.recoveryButton} onPress={onRestart} accessibilityRole="button">
+        <Text style={styles.recoveryButtonText}>Tap to restart</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/**
+ * Root React ErrorBoundary. On catch it renders RecoveryScreen and fires the
+ * categorical `app_error` analytics event with the offending component name
+ * only — no message, stack text, or PII (per src/services/analytics.ts). Placed
+ * inside PostHogProvider + after AnalyticsBootstrap so `_client` is bound when
+ * componentDidCatch runs.
+ */
+class RootErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  componentDidCatch(_error: Error, info: React.ErrorInfo): void {
+    // Extract ONLY the top component name from the React component stack —
+    // a bounded identifier, never free text. Stack lines look like "    in Foo".
+    const firstFrame = (info?.componentStack ?? "").trim().split("\n")[0] ?? "";
+    const match = firstFrame.match(/in ([A-Za-z0-9_]+)/);
+    captureAppError({ component: match ? match[1] : "unknown" });
+  }
+
+  handleRestart = (): void => this.setState({ hasError: false });
+
+  render(): React.ReactNode {
+    if (this.state.hasError) return <RecoveryScreen onRestart={this.handleRestart} />;
+    return this.props.children;
+  }
+}
+
+const styles = StyleSheet.create({
+  recoveryRoot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.bg,
+    padding: 32,
+  },
+  recoveryTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 24,
+  },
+  recoveryButton: {
+    backgroundColor: colors.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+  },
+  recoveryButtonText: {
+    color: colors.bg,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+});
 
 export default function App() {
   // If POSTHOG_KEY is missing (e.g. local dev without the secret), wrap with
@@ -44,10 +122,12 @@ export default function App() {
       autocapture={{ captureScreens: false }}
     >
       <AnalyticsBootstrap />
-      <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor="#0A0A0B" />
-        <AppNavigation />
-      </SafeAreaProvider>
+      <RootErrorBoundary>
+        <SafeAreaProvider>
+          <StatusBar barStyle="light-content" backgroundColor="#0A0A0B" />
+          <AppNavigation />
+        </SafeAreaProvider>
+      </RootErrorBoundary>
     </PostHogProvider>
   );
 }

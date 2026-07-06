@@ -1,4 +1,4 @@
-Generated 2026-07-06 from main 1f4a846. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
+Generated 2026-07-06 from main 09e772c. This is a snapshot for pasting into Claude.ai chats — the repo is the source of truth.
 
 ===== arnold-system/INDEX.md =====
 
@@ -98,7 +98,7 @@ CC then opens this file (arnold-system/PROTOCOL.md), works the checklist top to 
 
 # FOCAL — what matters right now
 
-**Updated:** July 6, 2026 (strategy pivot — validation moves from F&F to strangers)
+**Updated:** July 6, 2026 (Build 10 prep — ErrorBoundary + goals fix + model bump; repo public-until-launch)
 **Build state:** `main` at `becf6f4`; tag **mvp-1.20** is the live code state, tsc baseline 43, tree clean, v2.4.12 shipped. **mvp-1.20 code is live on TestFlight as Build 9** (shipped June 22, 2026; see build-2026-06.md).
 **The one goal:** Get Arnold in front of people who are not Edwin and find out if anyone trains a SECOND time. The retention number is the only thing that resolves the open guesses.
 
@@ -113,7 +113,8 @@ Everything below serves that. If a task isn't here or unblocking it, question it
 
 ## Ship-blockers (do in parallel, none depend on the texts)
 - [x] ~~Decide final app name~~ DONE (July 3, 2026): App Store name "Arnold Coach", subtitle "AI Calisthenics Coach" (see DECISIONS.md / OPEN-DECISIONS #2).
-- [ ] Privacy: enable GitHub Pages, paste URL into App Store Connect, get Overview review per v2.4.6. (Drafts already committed in docs/.)
+- [ ] **Flip `arnold-mvp` private BEFORE App Store public launch.** Repo is intentionally public until launch (founder call, option A, July 6 — see OPEN-DECISIONS #1); it exposes the full brain. Must go private before public launch.
+- [ ] **Create always-public `arnold-legal` repo** (privacy.md + ToS) + enable GitHub Pages → paste the live privacy URL into App Store Connect. Separate repo so the store URLs survive the arnold-mvp private flip. ⚠️ BLOCKED July 6: `gh` CLI not installed / no token in this env — external step for Edwin (commands provided in build report). Supersedes the old "enable Pages on docs/" plan.
 - [x] ~~Decide mvp-1.20 → TestFlight build: now, or after the capped polish pass.~~ DONE — shipped now (Build 9, June 22, 2026); ship-now path taken, capped polish pass not gated ahead of it.
 - [ ] App Store screenshots, keywords, description (needs final name).
 
@@ -152,10 +153,12 @@ Things only Edwin (or a specific chat) can resolve. The migration should NOT exe
 until the founder-owned gates below are answered.
 
 ## Founder-owned gates (block the repo migration)
-1. ~~**Repo privacy.**~~ ✅ RESOLVED at migration (option **b — split**): specs / amendments / bibles are
-   public in `arnold-system/`; sensitive strategy (saas-building-guide, RES_LLAJUA.xlsx) lives in
-   `arnold-system/strategy/private/`, gitignored — local-only, never pushed, never in the snapshot.
-   Health-checked (git check-ignore + git ls-files confirm nothing under private/ is tracked).
+1. ~~**Repo privacy.**~~ ✅ DECIDED (founder call, option **A**, July 6, 2026): **repo intentionally public
+   until launch.** (Corrects the earlier "RESOLVED at migration (split)" note, which was inaccurate —
+   verified July 6 the full brain is publicly clonable; only `strategy/private/` (saas-guide, xlsx) is
+   gitignored, not the rest.) **Ship-blocker added to FOCAL: flip `arnold-mvp` private BEFORE App Store
+   public launch.** Legal docs (privacy/ToS) move to a separate always-public `arnold-legal` repo so the
+   store-facing URLs survive that flip — see FOCAL ship-blocker (external step, pending).
 2. ~~**Final app name.**~~ ✅ RESOLVED (July 3, 2026): App Store name = **"Arnold Coach"** (keep the
    live ASC listing as-is), subtitle = **"AI Calisthenics Coach"** (carries the ICP search keyword).
    Arnold-vs-Arnold-Coach conflict closed in favor of the live listing. Logged in DECISIONS.md; unblocks
@@ -172,6 +175,14 @@ until the founder-owned gates below are answered.
    Lock the cap explicitly or it becomes the next avoidance object.
 
 ## Carried open flags
+- **Four-agent architecture is spec-live but runtime-dormant (Build 10 STOP, July 6).** A request to
+  delete/LEGACY-mark progressAnalyst / planGenerator / sessionAdapter / processCompletedSession was
+  STOPPED: v2.4.8 explicitly preserves the four-agent architecture (§15.2 — "No new agents… the
+  four-agent architecture stands"), which contradicts the "v2.4.8 collapsed to conversation+rules"
+  premise. At runtime only the conversation agent fires — a spec-vs-reality GAP, not settled dead code.
+  Resolve by decision (check base spec §15.2, then either wire them, or amend the spec to formally
+  retire them) before any deletion. Safe half done: DEFAULT_MODEL → claude-sonnet-4-6 so the dormant
+  paths can't call a retired model.
 - Schwarzenegger trademark/likeness exposure — before commercial public launch.
 - Does live v2.4.8 architecture actually produce coach-like (agentic) behavior or only Q&A?
   Build to verify against spec — this is the first quality iteration target, post-feedback.
@@ -206,6 +217,7 @@ These would have been lost on migration. Each should point to a spec/amendment w
 - **v2.4.8 clarifications RESOLVED** (priority-5 single question, behavioralFlags scoped to skips, Endurance future-spec). Live on main, not blocking.
 
 ## Distribution (Overview)
+- **Repo privacy — public until launch (founder call, option A, July 6, 2026).** `arnold-mvp` stays public (full brain is clonable; only `strategy/private/` gitignored) through the testing phase; **flip private before App Store public launch** (FOCAL ship-blocker). Legal docs move to an always-public `arnold-legal` repo so store URLs survive the flip. Corrects the earlier inaccurate "split resolved it" note.
 - **Distribution framework v1.1 generated but NOT filed** (held in-chat). Contains locked MVP decision: stop building features, ship to 10, fix only what breaks + build referral, week-4 retention >30% gate. AT RISK if not filed. → file into brain on migration.
 - **Tooling rejections:** Notion stays (one Project Map page). Rejected as premature: Obsidian, Airtable, ClickUp, Figma, Stripe Atlas, "Founder Mode" IG. Long-term org = Claude Code + repo (this migration).
 

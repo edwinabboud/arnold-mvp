@@ -24,6 +24,7 @@ These would have been lost on migration. Each should point to a spec/amendment w
 - **v2.4.8 clarifications RESOLVED** (priority-5 single question, behavioralFlags scoped to skips, Endurance future-spec). Live on main, not blocking.
 
 ## Distribution (Overview)
+- **Repo privacy — public until launch (founder call, option A, July 6, 2026).** `arnold-mvp` stays public (full brain is clonable; only `strategy/private/` gitignored) through the testing phase; **flip private before App Store public launch** (FOCAL ship-blocker). Legal docs move to an always-public `arnold-legal` repo so store URLs survive the flip. Corrects the earlier inaccurate "split resolved it" note.
 - **Distribution framework v1.1 generated but NOT filed** (held in-chat). Contains locked MVP decision: stop building features, ship to 10, fix only what breaks + build referral, week-4 retention >30% gate. AT RISK if not filed. → file into brain on migration.
 - **Tooling rejections:** Notion stays (one Project Map page). Rejected as premature: Obsidian, Airtable, ClickUp, Figma, Stripe Atlas, "Founder Mode" IG. Long-term org = Claude Code + repo (this migration).
 

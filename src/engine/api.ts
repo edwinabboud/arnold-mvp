@@ -43,7 +43,12 @@ import { AdaptationQueue, getUnsurfacedItems, formatForChat } from "./adaptation
 // The proxy validates the user's JWT and adds the API key server-side.
 const PROXY_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-proxy";
 const DELETE_ACCOUNT_URL = "https://wovmdwaeezdmxlbpnpkz.supabase.co/functions/v1/arnold-delete-account";
-const DEFAULT_MODEL = "claude-3-haiku-20240307";
+// claude-sonnet-4-6 (was claude-3-haiku-20240307, a deprecated model past its
+// Apr 19 2026 retirement). Hardened so no dormant/legacy agent path can call a
+// retired model. v2.4.8 preserves the four-agent architecture (§15.2), so those
+// paths were NOT deleted — this makes their fallback model safe. Conversation
+// agent uses CONVERSATION_MODEL regardless.
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 // claude-sonnet-4-6 — current Sonnet alias (verified against platform.claude.com
 // models overview). Replaces claude-sonnet-4-20250514 (Sonnet 4), which is
 // deprecated and retires 2026-06-15.

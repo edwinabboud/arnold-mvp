@@ -243,6 +243,14 @@ export interface UserProfile {
   experienceLevel?: "new" | "experienced";
   schedule: Schedule;
   targets: UserGoalTarget[];
+  /**
+   * Ranked program goals captured at onboarding (rank 1 = primary). Reconciles
+   * the drift where onboarding's `setProfile` wrote a `goals` shape the type
+   * didn't declare (the two long-standing baseline tsc errors). Optional so
+   * pre-existing profiles without it stay valid. Surfaced to the conversation
+   * agent via the packet's `goals.pathGoals` (conversationContext.ts).
+   */
+  goals?: Array<{ goal: string; rank: number }>;
   assessmentComplete: boolean;
   onboardingComplete: boolean;
 }
